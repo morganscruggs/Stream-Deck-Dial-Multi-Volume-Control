@@ -4,18 +4,27 @@ import streamDeck, {
 	DialRotateEvent,
 	DialUpEvent,
 	DidReceiveSettingsEvent,
+	FeedbackPayload,
 	SendToPluginEvent,
 	SingletonAction,
 	WillAppearEvent,
+	WillDisappearEvent,
 	TouchTapEvent
 } from "@elgato/streamdeck";
 import { NodeAudioVolumeMixer } from "node-audio-volume-mixer";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const execFileAsync = promisify(execFile);
 
 const AUDIO_APPS_DATASOURCE = "getAudioApps";
+
+// This file compiles to <sdPlugin>/bin/plugin.js, so the plugin's own root is one directory up.
+const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const DYNAMIC_ICON_DIR = path.join(PLUGIN_ROOT, "imgs", "actions", "volume", "dynamic");
 
 /**
  * Action that controls the volume of one or more applications at once using a single dial.
@@ -23,13 +32,63 @@ const AUDIO_APPS_DATASOURCE = "getAudioApps";
 @action({ UUID: "com.morgan-scruggs.volume-control-multi-dials.volume" })
 export class VolumeControl extends SingletonAction<VolumeSettings> {
 	/**
-	 * Initialize the dial display when it appears.
+	 * Tracks each visible dial's periodic refresh, keyed by action id, so a launched/closed app is
+	 * picked up (icon, grey/active bar) without waiting for the user to touch the dial themselves.
+	 */
+	private pollIntervals = new Map<string, ReturnType<typeof setInterval>>();
+
+	/**
+	 * Last-known settings per visible dial (action id), used by the poll below instead of calling
+	 * action.getSettings() on every tick. The only thing that actually needs to be "live" each tick is
+	 * whether a configured app is currently running, which updateFeedback already re-checks fresh every
+	 * call - the settings themselves (which apps, volume, mute) rarely change and are kept in sync here
+	 * whenever we already have them from a real event.
+	 */
+	private lastSettings = new Map<string, VolumeSettings>();
+
+	/**
+	 * Initialize the dial display when it appears, and start polling it while it's visible.
 	 */
 	override onWillAppear(ev: WillAppearEvent<VolumeSettings>): void | Promise<void> {
 		// This action is Encoder-only (see manifest.json), so ev.action is always a dial - but
 		// WillAppearEvent is shared with key actions, so setFeedback needs this type guard.
 		if (!ev.action.isDial()) return;
-		return updateFeedback(ev.action, ev.payload.settings);
+
+		const action = ev.action;
+		this.lastSettings.set(action.id, ev.payload.settings);
+		this.startPolling(action);
+
+		return updateFeedback(action, ev.payload.settings);
+	}
+
+	/**
+	 * Stops polling once the dial is no longer visible (navigated away from, unplugged, etc).
+	 */
+	override onWillDisappear(ev: WillDisappearEvent<VolumeSettings>): void {
+		this.stopPolling(ev.action.id);
+		this.lastSettings.delete(ev.action.id);
+	}
+
+	private startPolling(action: DialAction<VolumeSettings>): void {
+		this.stopPolling(action.id);
+		this.pollIntervals.set(
+			action.id,
+			setInterval(() => {
+				const settings = this.lastSettings.get(action.id);
+				if (!settings) return;
+				updateFeedback(action, settings).catch((error) =>
+					streamDeck.logger.error("Failed to refresh dial feedback", error)
+				);
+			}, 2000)
+		);
+	}
+
+	private stopPolling(actionId: string): void {
+		const interval = this.pollIntervals.get(actionId);
+		if (interval) {
+			clearInterval(interval);
+			this.pollIntervals.delete(actionId);
+		}
 	}
 
 	/**
@@ -39,6 +98,7 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 	 */
 	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<VolumeSettings>): Promise<void> {
 		if (!ev.action.isDial()) return;
+		this.lastSettings.set(ev.action.id, ev.payload.settings);
 		await updateFeedback(ev.action, ev.payload.settings);
 		this.applyToApps(ev.payload.settings);
 	}
@@ -61,6 +121,7 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 		settings.volume = Math.max(0, Math.min(100, currentVolume + ev.payload.ticks * stepSize));
 
 		await ev.action.setSettings(settings);
+		this.lastSettings.set(ev.action.id, settings);
 		await updateFeedback(ev.action, settings);
 
 		this.applyToApps(settings);
@@ -96,6 +157,7 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 		}
 
 		await ev.action.setSettings(settings);
+		this.lastSettings.set(ev.action.id, settings);
 		await updateFeedback(ev.action, settings);
 
 		this.applyToApps(settings);
@@ -185,47 +247,114 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 }
 
 /**
- * Caches each app's extracted icon (as a base64 data URI) by lowercased exe name, so it's only
- * extracted once per app per plugin session rather than on every rotate/press.
+ * Caches each app's extracted icon (as a base64 data URI) by lowercased exe name, for use in the
+ * property inspector's app picker list. Only extracted once per app per plugin session.
  */
 const iconCache = new Map<string, string>();
+
+/**
+ * Caches each app's extracted icon as a *file path* (relative to the plugin's own folder), for use in
+ * the dial's on-device feedback specifically. Kept separate from iconCache (which holds base64 data
+ * URIs for the property inspector) because Stream Deck's device rendering was found to not reliably
+ * redraw the icon layer when repeatedly fed different base64 blobs via setFeedback, but does update
+ * correctly when given a file path - see extractIconForPid/saveIconFile below.
+ */
+const dialIconPathCache = new Map<string, string>();
 const iconResolutionInFlight = new Set<string>();
+
+/**
+ * Generic mixer glyph shown on the dial when none of the configured apps are currently running - the
+ * same speaker + fader-lines combo icon used as the action's main icon (see manifest.json), referenced
+ * as a file rather than embedded base64 for the same redraw-reliability reason as dialIconPathCache.
+ */
+const DEFAULT_MIXER_ICON_PATH = "imgs/actions/volume/key@2x.png";
+
+/**
+ * Muted/inactive fill color for the dial's progress bar when none of the configured apps are running.
+ */
+const INACTIVE_BAR_COLOR = "#5a5a5a";
+
+/**
+ * Finds the first configured app (in list order) that's currently running/has an audio session.
+ */
+function findRunningApp(applications: string[] | undefined): string | undefined {
+	if (!applications || applications.length === 0) return undefined;
+
+	let sessions;
+	try {
+		sessions = NodeAudioVolumeMixer.getAudioSessionProcesses();
+	} catch {
+		return undefined;
+	}
+
+	const running = new Set(sessions.map((session) => session.name.toLowerCase()));
+	return applications.find((app) => running.has(app.toLowerCase()));
+}
 
 /**
  * Refreshes the dial's on-device title/value/indicator/icon to match its current settings.
  *
- * The icon is resolved from the first configured app's own executable (same as how apps show their
- * own icon in the Windows volume mixer) - with several apps controlled by one dial, that first app
- * stands in for the group. Extraction happens off to the side rather than being awaited here, so a
- * not-yet-cached icon never delays the rest of the feedback update - once it resolves, feedback is
- * sent again with the icon included.
+ * The icon is resolved from the highest-priority configured app that's actually running right now
+ * (falling through the list in order); if none are running, a generic mixer icon is shown instead
+ * and the progress bar is greyed out, since there's nothing currently controllable. Icon extraction
+ * happens off to the side rather than being awaited here, so a not-yet-cached icon never delays the
+ * rest of the feedback update - once it resolves, feedback is sent again with the icon included.
  */
 function updateFeedback(action: DialAction<VolumeSettings>, settings: VolumeSettings): Promise<void> {
 	const volume = settings.volume ?? 50;
-	const primaryApp = settings.applications?.[0];
-	const appKey = primaryApp?.toLowerCase();
-	const icon = appKey ? iconCache.get(appKey) : undefined;
+	const barValue = settings.isMuted ? 0 : volume;
+	const runningApp = findRunningApp(settings.applications);
+	const appKey = runningApp?.toLowerCase();
+	const iconPath = appKey ? dialIconPathCache.get(appKey) : undefined;
 
-	const feedback: Record<string, string | number> = {
+	const feedback: FeedbackPayload = {
 		title: settings.isMuted ? "Muted" : "Multi Volume",
 		value: settings.isMuted ? "Muted" : `${volume}%`,
-		indicator: settings.isMuted ? 0 : volume
+		indicator: runningApp ? barValue : { value: barValue, bar_fill_c: INACTIVE_BAR_COLOR },
+		icon: iconPath ?? DEFAULT_MIXER_ICON_PATH
 	};
-	if (icon) feedback.icon = icon;
 
-	if (appKey && primaryApp && !icon && !iconResolutionInFlight.has(appKey)) {
+	if (runningApp && appKey && !iconPath && !iconResolutionInFlight.has(appKey)) {
 		iconResolutionInFlight.add(appKey);
-		resolveAppIcon(primaryApp)
+		resolveAppIcon(runningApp)
 			.then((dataUri) => {
 				if (!dataUri) return;
 				iconCache.set(appKey, dataUri);
-				return action.setFeedback({ ...feedback, icon: dataUri });
+
+				const savedPath = saveIconFile(appKey, dataUri);
+				if (!savedPath) return;
+				dialIconPathCache.set(appKey, savedPath);
+
+				// The app that triggered this may have stopped running (or been replaced by a
+				// higher-priority one) while extraction was in flight - re-check live rather than
+				// blindly applying a stale snapshot, which would clobber a more recent, correct update.
+				if (findRunningApp(settings.applications) !== runningApp) return;
+				return action.setFeedback({ ...feedback, icon: savedPath });
 			})
-			.catch((error) => streamDeck.logger.error(`Failed to load icon for ${primaryApp}`, error))
+			.catch((error) => streamDeck.logger.error(`Failed to load icon for ${runningApp}`, error))
 			.finally(() => iconResolutionInFlight.delete(appKey));
 	}
 
 	return action.setFeedback(feedback);
+}
+
+/**
+ * Writes an extracted icon (base64 data URI) to a file under the plugin's own imgs folder, returning
+ * its path relative to the plugin root - suitable for use as a Pixmap layout item's value.
+ */
+function saveIconFile(appKey: string, dataUri: string): string | undefined {
+	const match = /^data:image\/png;base64,(.+)$/.exec(dataUri);
+	if (!match) return undefined;
+
+	try {
+		fs.mkdirSync(DYNAMIC_ICON_DIR, { recursive: true });
+		const fileName = `${appKey.replace(/[^a-z0-9.-]/gi, "_")}.png`;
+		fs.writeFileSync(path.join(DYNAMIC_ICON_DIR, fileName), Buffer.from(match[1], "base64"));
+		return `imgs/actions/volume/dynamic/${fileName}`;
+	} catch (error) {
+		streamDeck.logger.error(`Failed to save icon file for ${appKey}`, error);
+		return undefined;
+	}
 }
 
 /**
