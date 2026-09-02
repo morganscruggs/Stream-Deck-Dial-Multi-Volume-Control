@@ -18,7 +18,7 @@ const execFileAsync = promisify(execFile);
 const AUDIO_APPS_DATASOURCE = "getAudioApps";
 
 /**
- * Action that controls the volume of a single application using a dial.
+ * Action that controls the volume of one or more applications at once using a single dial.
  */
 @action({ UUID: "com.morgan-scruggs.volume-control-multi-dials.volume" })
 export class VolumeControl extends SingletonAction<VolumeSettings> {
@@ -151,14 +151,14 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 	}
 
 	/**
-	 * Applies the current volume/mute state to every audio session belonging to the configured app.
+	 * Applies the current volume/mute state to every audio session belonging to the configured apps.
 	 *
 	 * A single app (e.g. Chrome) can own several sessions at once - one per process that is actually
 	 * producing sound - so we apply the change to all matching sessions, not just the first.
 	 */
 	private applyToApps(settings: VolumeSettings): void {
-		if (!settings.application) return;
-		const target = settings.application.toLowerCase();
+		const targets = (settings.applications ?? []).map((name) => name.toLowerCase());
+		if (targets.length === 0) return;
 
 		const isMuted = settings.isMuted ?? false;
 		const volumeLevel = (settings.volume ?? 50) / 100;
@@ -171,7 +171,7 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 			return;
 		}
 
-		const matches = sessions.filter((session) => session.name.toLowerCase() === target);
+		const matches = sessions.filter((session) => targets.includes(session.name.toLowerCase()));
 
 		matches.forEach((session) => {
 			try {
@@ -194,14 +194,16 @@ const iconResolutionInFlight = new Set<string>();
 /**
  * Refreshes the dial's on-device title/value/indicator/icon to match its current settings.
  *
- * The icon is resolved from the target app's own executable (same as how apps show their own icon
- * in the Windows volume mixer). Extraction happens off to the side rather than being awaited here,
- * so a not-yet-cached icon never delays the rest of the feedback update - once it resolves, feedback
- * is sent again with the icon included.
+ * The icon is resolved from the first configured app's own executable (same as how apps show their
+ * own icon in the Windows volume mixer) - with several apps controlled by one dial, that first app
+ * stands in for the group. Extraction happens off to the side rather than being awaited here, so a
+ * not-yet-cached icon never delays the rest of the feedback update - once it resolves, feedback is
+ * sent again with the icon included.
  */
 function updateFeedback(action: DialAction<VolumeSettings>, settings: VolumeSettings): Promise<void> {
 	const volume = settings.volume ?? 50;
-	const appKey = settings.application?.toLowerCase();
+	const primaryApp = settings.applications?.[0];
+	const appKey = primaryApp?.toLowerCase();
 	const icon = appKey ? iconCache.get(appKey) : undefined;
 
 	const feedback: Record<string, string | number> = {
@@ -211,15 +213,15 @@ function updateFeedback(action: DialAction<VolumeSettings>, settings: VolumeSett
 	};
 	if (icon) feedback.icon = icon;
 
-	if (appKey && !icon && !iconResolutionInFlight.has(appKey)) {
+	if (appKey && primaryApp && !icon && !iconResolutionInFlight.has(appKey)) {
 		iconResolutionInFlight.add(appKey);
-		resolveAppIcon(settings.application!)
+		resolveAppIcon(primaryApp)
 			.then((dataUri) => {
 				if (!dataUri) return;
 				iconCache.set(appKey, dataUri);
 				return action.setFeedback({ ...feedback, icon: dataUri });
 			})
-			.catch((error) => streamDeck.logger.error(`Failed to load icon for ${settings.application}`, error))
+			.catch((error) => streamDeck.logger.error(`Failed to load icon for ${primaryApp}`, error))
 			.finally(() => iconResolutionInFlight.delete(appKey));
 	}
 
@@ -281,7 +283,7 @@ function prettifyAppName(exeName: string): string {
 
 export type VolumeSettings = {
 	volume?: number;
-	application?: string;
+	applications?: string[];
 	stepSize?: number;
 	isMuted?: boolean;
 	previousVolume?: number;

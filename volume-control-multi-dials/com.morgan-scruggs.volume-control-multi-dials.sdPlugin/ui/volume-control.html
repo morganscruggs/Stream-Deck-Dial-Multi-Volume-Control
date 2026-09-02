@@ -5,9 +5,22 @@
     <meta charset="utf-8" />
     <script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
     <style>
+        .applications-container {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            width: 100%;
+        }
+        .app-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            width: 100%;
+        }
         .app-picker {
             position: relative;
-            width: 100%;
+            flex: 1;
+            min-width: 0;
         }
         .app-picker-button {
             display: flex;
@@ -78,6 +91,23 @@
             color: #999;
             font-style: italic;
         }
+        .app-row-remove {
+            flex: none;
+            width: 22px;
+            height: 22px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background: #2f2f2f;
+            color: #bbb;
+            cursor: pointer;
+            font-size: 12px;
+            line-height: 1;
+        }
+        .app-row-remove:hover {
+            background: #4a2f2f;
+            color: #fff;
+            border-color: #a55;
+        }
     </style>
 </head>
 <body>
@@ -89,14 +119,7 @@
     </sdpi-item>
 
     <sdpi-item label="Application">
-        <div class="app-picker" id="app-picker">
-            <button type="button" class="app-picker-button" id="app-picker-button">
-                <img class="app-picker-icon" id="app-picker-icon" hidden />
-                <span class="app-picker-label" id="app-picker-label">Select an application</span>
-                <span class="app-picker-chevron">&#9662;</span>
-            </button>
-            <div class="app-picker-list" id="app-picker-list" hidden></div>
-        </div>
+        <div class="applications-container" id="applications-container"></div>
     </sdpi-item>
     <p>Only apps currently playing audio are listed here.</p>
 
@@ -108,97 +131,207 @@
     </sdpi-item>
 
     <script>
-        // Native <select>/<option> elements can't show an icon per row in any browser, so the
-        // Application picker is hand-built here (button + floating list) instead of sdpi-select,
-        // reusing the same "getAudioApps" request/response contract with the plugin.
+        // Native <select>/<option> elements can't show an icon per row in any browser, so each
+        // "Application" row is hand-built (button + floating list) instead of sdpi-select, reusing
+        // the same "getAudioApps" request/response contract with the plugin. Picking an app in the
+        // last (empty) row appends a fresh empty row; the (x) button removes a row outright.
+        //
+        // Rows are added/removed incrementally rather than wiping and rebuilding the whole list on
+        // every change, except when a row is removed from the middle - since every row after it
+        // needs to shift index, that one case does a full, deliberate rebuild from the settings array.
         (async function () {
             const client = SDPIComponents.streamDeckClient;
-            const button = document.getElementById("app-picker-button");
-            const list = document.getElementById("app-picker-list");
-            const iconEl = document.getElementById("app-picker-icon");
-            const labelEl = document.getElementById("app-picker-label");
+            const container = document.getElementById("applications-container");
 
             const initial = await client.getSettings();
-            let selected = initial.settings.application || "";
+            let applications = Array.isArray(initial.settings.applications) ? initial.settings.applications.slice() : [];
             let items = [];
-
-            function renderButton() {
-                const match = items.find((item) => item.value === selected);
-                const label = match ? match.label : selected || "Select an application";
-                labelEl.textContent = label;
-
-                const icon = match && match.icon;
-                if (icon) {
-                    iconEl.src = icon;
-                    iconEl.hidden = false;
-                } else {
-                    iconEl.hidden = true;
-                }
-            }
-
-            function renderList() {
-                list.innerHTML = "";
-
-                if (items.length === 0) {
-                    const empty = document.createElement("div");
-                    empty.className = "app-picker-empty";
-                    empty.textContent = "No apps currently playing audio";
-                    list.appendChild(empty);
-                    return;
-                }
-
-                items.forEach((item) => {
-                    const row = document.createElement("div");
-                    row.className = "app-picker-item";
-
-                    if (item.icon) {
-                        const img = document.createElement("img");
-                        img.src = item.icon;
-                        row.appendChild(img);
-                    }
-
-                    const span = document.createElement("span");
-                    span.textContent = item.label;
-                    row.appendChild(span);
-
-                    row.addEventListener("click", async () => {
-                        selected = item.value;
-                        list.hidden = true;
-                        renderButton();
-
-                        const current = await client.getSettings();
-                        await client.setSettings({ ...current.settings, application: selected });
-                    });
-
-                    list.appendChild(row);
-                });
-            }
+            let itemsLoaded = false;
+            const pickers = [];
 
             async function fetchItems() {
-                labelEl.textContent = "Detecting running apps...";
                 await client.send("sendToPlugin", { event: "getAudioApps" });
             }
 
             client.sendToPropertyInspector.subscribe((message) => {
                 if (message.payload && message.payload.event === "getAudioApps") {
                     items = message.payload.items || [];
-                    renderList();
-                    renderButton();
+                    itemsLoaded = true;
+                    pickers.forEach((picker) => picker.refresh());
                 }
             });
 
-            button.addEventListener("click", async (ev) => {
-                ev.stopPropagation();
-                const opening = list.hidden;
-                list.hidden = !opening;
-                if (opening) await fetchItems();
-            });
+            async function persist() {
+                const current = await client.getSettings();
+                await client.setSettings({ ...current.settings, applications });
+            }
+
+            function otherSelectedValues(excludeIndex) {
+                return applications.filter((_, i) => i !== excludeIndex);
+            }
+
+            function createRow(index, initialValue) {
+                const row = document.createElement("div");
+                row.className = "app-row";
+
+                const wrapper = document.createElement("div");
+                wrapper.className = "app-picker";
+
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "app-picker-button";
+
+                const iconEl = document.createElement("img");
+                iconEl.className = "app-picker-icon";
+                iconEl.hidden = true;
+
+                const labelEl = document.createElement("span");
+                labelEl.className = "app-picker-label";
+
+                const chevron = document.createElement("span");
+                chevron.className = "app-picker-chevron";
+                chevron.innerHTML = "&#9662;";
+
+                button.append(iconEl, labelEl, chevron);
+
+                const list = document.createElement("div");
+                list.className = "app-picker-list";
+                list.hidden = true;
+
+                wrapper.append(button, list);
+                row.appendChild(wrapper);
+
+                let value = initialValue || "";
+
+                const removeBtn = document.createElement("button");
+                removeBtn.type = "button";
+                removeBtn.className = "app-row-remove";
+                removeBtn.textContent = "✕";
+                removeBtn.title = "Remove";
+                removeBtn.hidden = !value;
+                removeBtn.addEventListener("click", (ev) => {
+                    ev.stopPropagation();
+                    applications = applications.filter((_, i) => i !== index);
+                    persist();
+                    rebuildAll();
+                });
+                row.appendChild(removeBtn);
+
+                function renderButton() {
+                    const match = items.find((item) => item.value === value);
+                    labelEl.textContent = match ? match.label : (value || "Select an application");
+                    if (match && match.icon) {
+                        iconEl.src = match.icon;
+                        iconEl.hidden = false;
+                    } else {
+                        iconEl.hidden = true;
+                    }
+                    removeBtn.hidden = !value;
+                }
+
+                function renderList() {
+                    list.innerHTML = "";
+                    const excluded = new Set(otherSelectedValues(index));
+                    const available = items.filter((item) => !excluded.has(item.value));
+
+                    if (available.length === 0) {
+                        const empty = document.createElement("div");
+                        empty.className = "app-picker-empty";
+                        empty.textContent = itemsLoaded ? "No other apps currently playing audio" : "Detecting running apps...";
+                        list.appendChild(empty);
+                        return;
+                    }
+
+                    available.forEach((item) => {
+                        const itemRow = document.createElement("div");
+                        itemRow.className = "app-picker-item";
+
+                        if (item.icon) {
+                            const img = document.createElement("img");
+                            img.src = item.icon;
+                            itemRow.appendChild(img);
+                        }
+
+                        const span = document.createElement("span");
+                        span.textContent = item.label;
+                        itemRow.appendChild(span);
+
+                        itemRow.addEventListener("click", () => {
+                            list.hidden = true;
+                            selectValue(item.value);
+                        });
+
+                        list.appendChild(itemRow);
+                    });
+                }
+
+                function selectValue(newValue) {
+                    const wasEmpty = !value;
+                    value = newValue;
+                    renderButton();
+
+                    const next = applications.slice();
+                    if (index < next.length) {
+                        next[index] = newValue;
+                    } else {
+                        next.push(newValue);
+                    }
+                    applications = next;
+                    persist();
+
+                    if (wasEmpty && index === pickers.length - 1) {
+                        addRow("");
+                    }
+
+                    pickers.forEach((picker) => picker.refresh());
+                }
+
+                button.addEventListener("click", async (ev) => {
+                    ev.stopPropagation();
+                    document.querySelectorAll(".app-picker-list").forEach((el) => {
+                        if (el !== list) el.hidden = true;
+                    });
+                    const opening = list.hidden;
+                    list.hidden = !opening;
+                    if (opening) {
+                        renderList();
+                        await fetchItems();
+                        renderList();
+                    }
+                });
+
+                renderButton();
+
+                return {
+                    element: row,
+                    refresh() {
+                        renderButton();
+                        if (!list.hidden) renderList();
+                    }
+                };
+            }
+
+            function addRow(initialValue) {
+                const index = pickers.length;
+                const picker = createRow(index, initialValue);
+                pickers.push(picker);
+                container.appendChild(picker.element);
+            }
+
+            function rebuildAll() {
+                container.innerHTML = "";
+                pickers.length = 0;
+                applications.forEach((app) => addRow(app));
+                addRow("");
+            }
+
+            rebuildAll();
 
             document.addEventListener("click", () => {
-                list.hidden = true;
+                document.querySelectorAll(".app-picker-list").forEach((el) => {
+                    el.hidden = true;
+                });
             });
-
-            renderButton();
         })();
     </script>
 </body>
