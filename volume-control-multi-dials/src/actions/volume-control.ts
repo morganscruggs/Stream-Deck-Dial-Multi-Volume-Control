@@ -102,9 +102,8 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 	}
 
 	/**
-	 * Responds to the app picker's datasource request (sdpi-select's `datasource`) - fired once when
-	 * the property inspector opens, and again each time the dropdown is clicked (see volume-control.html's
-	 * `.refresh()` call), rather than on a timer that would otherwise close the dropdown mid-use.
+	 * Responds to the custom app picker's request for the running-apps list (see volume-control.html) -
+	 * fired once when the property inspector opens, and again each time the picker is clicked.
 	 */
 	override onSendToPlugin(ev: SendToPluginEvent<any, VolumeSettings>): void {
 		const payload = ev.payload as { event?: string } | undefined;
@@ -115,25 +114,35 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 
 	/**
 	 * Sends the current list of apps with an active audio session to the property inspector, for the
-	 * "Application" picker. Only apps actively producing sound have a session (same as the Windows
-	 * volume mixer), so a silent app won't show up until it plays something.
+	 * "Application" picker - each with its own icon, so the picker can show it next to the app's name.
+	 * Only apps actively producing sound have a session (same as the Windows volume mixer), so a
+	 * silent app won't show up until it plays something.
 	 */
-	private sendAudioApps(): void {
-		let items: { value: string; label: string }[] = [];
+	private async sendAudioApps(): Promise<void> {
+		let items: { value: string; label: string; icon?: string }[] = [];
 
 		try {
 			const sessions = NodeAudioVolumeMixer.getAudioSessionProcesses();
 			const seen = new Set<string>();
+			const deduped = sessions.filter((session) => {
+				const key = session.name.toLowerCase();
+				if (seen.has(key)) return false;
+				seen.add(key);
+				return true;
+			});
 
-			items = sessions
-				.filter((session) => {
+			items = await Promise.all(
+				deduped.map(async (session) => {
 					const key = session.name.toLowerCase();
-					if (seen.has(key)) return false;
-					seen.add(key);
-					return true;
+					let icon = iconCache.get(key);
+					if (!icon) {
+						icon = await extractIconForPid(session.pid).catch(() => undefined);
+						if (icon) iconCache.set(key, icon);
+					}
+					return { value: session.name, label: prettifyAppName(session.name), icon };
 				})
-				.map((session) => ({ value: session.name, label: prettifyAppName(session.name) }))
-				.sort((a, b) => a.label.localeCompare(b.label));
+			);
+			items.sort((a, b) => a.label.localeCompare(b.label));
 		} catch (error) {
 			streamDeck.logger.error("Failed to list audio sessions", error);
 		}

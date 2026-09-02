@@ -4,6 +4,81 @@
     <title>Multi Volume Settings</title>
     <meta charset="utf-8" />
     <script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
+    <style>
+        .app-picker {
+            position: relative;
+            width: 100%;
+        }
+        .app-picker-button {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            box-sizing: border-box;
+            background: #2f2f2f;
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 5px 8px;
+            color: #ddd;
+            font-size: 12px;
+            font-family: inherit;
+            cursor: pointer;
+        }
+        .app-picker-button:hover {
+            background: #3a3a3a;
+        }
+        .app-picker-icon {
+            width: 18px;
+            height: 18px;
+            object-fit: contain;
+            flex: none;
+        }
+        .app-picker-label {
+            flex: 1;
+            text-align: left;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .app-picker-chevron {
+            flex: none;
+            opacity: 0.7;
+            font-size: 10px;
+        }
+        .app-picker-list {
+            position: absolute;
+            top: calc(100% + 2px);
+            left: 0;
+            right: 0;
+            background: #2f2f2f;
+            border: 1px solid #555;
+            border-radius: 4px;
+            max-height: 220px;
+            overflow-y: auto;
+            z-index: 20;
+        }
+        .app-picker-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 8px;
+            cursor: pointer;
+        }
+        .app-picker-item:hover {
+            background: #454545;
+        }
+        .app-picker-item img {
+            width: 18px;
+            height: 18px;
+            object-fit: contain;
+            flex: none;
+        }
+        .app-picker-empty {
+            padding: 6px 8px;
+            color: #999;
+            font-style: italic;
+        }
+    </style>
 </head>
 <body>
     <sdpi-item label="Step Size">
@@ -14,26 +89,16 @@
     </sdpi-item>
 
     <sdpi-item label="Application">
-        <sdpi-select
-            id="application-select"
-            setting="application"
-            datasource="getAudioApps"
-            loading="Detecting running apps..."
-            placeholder="Select an application"
-        ></sdpi-select>
+        <div class="app-picker" id="app-picker">
+            <button type="button" class="app-picker-button" id="app-picker-button">
+                <img class="app-picker-icon" id="app-picker-icon" hidden />
+                <span class="app-picker-label" id="app-picker-label">Select an application</span>
+                <span class="app-picker-chevron">&#9662;</span>
+            </button>
+            <div class="app-picker-list" id="app-picker-list" hidden></div>
+        </div>
     </sdpi-item>
     <p>Only apps currently playing audio are listed here.</p>
-
-    <script>
-        // Re-fetch the running-apps list only when the dropdown is actually opened, instead of
-        // continuously pushing updates in the background - a background push while the dropdown is
-        // open closes it out from under the user.
-        customElements.whenDefined("sdpi-select").then(() => {
-            document.getElementById("application-select").addEventListener("click", (ev) => {
-                ev.target.refresh();
-            });
-        });
-    </script>
 
     <sdpi-item label="Volume">
         <sdpi-range setting="volume" min="0" max="100" step="1" default="50" showlabels>
@@ -41,5 +106,100 @@
             <span slot="max">100%</span>
         </sdpi-range>
     </sdpi-item>
+
+    <script>
+        // Native <select>/<option> elements can't show an icon per row in any browser, so the
+        // Application picker is hand-built here (button + floating list) instead of sdpi-select,
+        // reusing the same "getAudioApps" request/response contract with the plugin.
+        (async function () {
+            const client = SDPIComponents.streamDeckClient;
+            const button = document.getElementById("app-picker-button");
+            const list = document.getElementById("app-picker-list");
+            const iconEl = document.getElementById("app-picker-icon");
+            const labelEl = document.getElementById("app-picker-label");
+
+            const initial = await client.getSettings();
+            let selected = initial.settings.application || "";
+            let items = [];
+
+            function renderButton() {
+                const match = items.find((item) => item.value === selected);
+                const label = match ? match.label : selected || "Select an application";
+                labelEl.textContent = label;
+
+                const icon = match && match.icon;
+                if (icon) {
+                    iconEl.src = icon;
+                    iconEl.hidden = false;
+                } else {
+                    iconEl.hidden = true;
+                }
+            }
+
+            function renderList() {
+                list.innerHTML = "";
+
+                if (items.length === 0) {
+                    const empty = document.createElement("div");
+                    empty.className = "app-picker-empty";
+                    empty.textContent = "No apps currently playing audio";
+                    list.appendChild(empty);
+                    return;
+                }
+
+                items.forEach((item) => {
+                    const row = document.createElement("div");
+                    row.className = "app-picker-item";
+
+                    if (item.icon) {
+                        const img = document.createElement("img");
+                        img.src = item.icon;
+                        row.appendChild(img);
+                    }
+
+                    const span = document.createElement("span");
+                    span.textContent = item.label;
+                    row.appendChild(span);
+
+                    row.addEventListener("click", async () => {
+                        selected = item.value;
+                        list.hidden = true;
+                        renderButton();
+
+                        const current = await client.getSettings();
+                        await client.setSettings({ ...current.settings, application: selected });
+                    });
+
+                    list.appendChild(row);
+                });
+            }
+
+            async function fetchItems() {
+                labelEl.textContent = "Detecting running apps...";
+                await client.send("sendToPlugin", { event: "getAudioApps" });
+            }
+
+            client.sendToPropertyInspector.subscribe((message) => {
+                if (message.payload && message.payload.event === "getAudioApps") {
+                    items = message.payload.items || [];
+                    renderList();
+                    renderButton();
+                }
+            });
+
+            button.addEventListener("click", async (ev) => {
+                ev.stopPropagation();
+                const opening = list.hidden;
+                list.hidden = !opening;
+                if (opening) await fetchItems();
+            });
+
+            document.addEventListener("click", () => {
+                list.hidden = true;
+            });
+
+            renderButton();
+        })();
+    </script>
 </body>
 </html>
