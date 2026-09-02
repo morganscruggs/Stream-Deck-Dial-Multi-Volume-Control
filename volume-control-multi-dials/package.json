@@ -17,6 +17,7 @@
         "typescript": "^5.2.2"
     },
     "dependencies": {
-        "@elgato/streamdeck": "^2.0.0"
+        "@elgato/streamdeck": "^2.0.0",
+        "node-audio-volume-mixer": "^1.0.3"
     }
 }

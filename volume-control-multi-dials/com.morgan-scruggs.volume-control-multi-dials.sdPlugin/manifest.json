@@ -4,18 +4,26 @@
 	"Author": "Morgan Scruggs",
 	"Actions": [
 		{
-			"Name": "Counter",
-			"UUID": "com.morgan-scruggs.volume-control-multi-dials.increment",
-			"Icon": "imgs/actions/counter/icon",
-			"Tooltip": "Displays a count, which increments by one on press.",
-			"PropertyInspectorPath": "ui/increment-counter.html",
+			"Name": "Multi Volume Dial",
+			"UUID": "com.morgan-scruggs.volume-control-multi-dials.volume",
+			"Icon": "imgs/actions/volume/icon",
+			"Tooltip": "Control the volume of an application.",
+			"PropertyInspectorPath": "ui/volume-control.html",
 			"Controllers": [
-				"Keypad"
+				"Encoder"
 			],
+
+			"Encoder": {
+				"layout": "$B1",
+				"TriggerDescription": {
+					"Rotate": "Adjust Volume",
+					"Push": "Mute / Unmute",
+					"Touch": "Mute / Unmute"
+				}
+			},
 			"States": [
 				{
-					"Image": "imgs/actions/counter/key",
-					"TitleAlignment": "middle"
+					"Image": "imgs/actions/volume/key"
 				}
 			]
 		}

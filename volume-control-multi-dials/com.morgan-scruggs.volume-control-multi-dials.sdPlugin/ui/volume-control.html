@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+    <title>Multi Volume Settings</title>
+    <meta charset="utf-8" />
+    <script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
+</head>
+<body>
+    <sdpi-item label="Step Size">
+        <sdpi-range setting="stepSize" min="1" max="5" step="1" default="1" showlabels>
+            <span slot="min">1</span>
+            <span slot="max">5</span>
+        </sdpi-range>
+    </sdpi-item>
+
+    <sdpi-item label="Application">
+        <sdpi-select
+            id="application-select"
+            setting="application"
+            datasource="getAudioApps"
+            loading="Detecting running apps..."
+            placeholder="Select an application"
+        ></sdpi-select>
+    </sdpi-item>
+    <p>Only apps currently playing audio are listed here.</p>
+
+    <script>
+        // Re-fetch the running-apps list only when the dropdown is actually opened, instead of
+        // continuously pushing updates in the background - a background push while the dropdown is
+        // open closes it out from under the user.
+        customElements.whenDefined("sdpi-select").then(() => {
+            document.getElementById("application-select").addEventListener("click", (ev) => {
+                ev.target.refresh();
+            });
+        });
+    </script>
+
+    <sdpi-item label="Volume">
+        <sdpi-range setting="volume" min="0" max="100" step="1" default="50" showlabels>
+            <span slot="min">0%</span>
+            <span slot="max">100%</span>
+        </sdpi-range>
+    </sdpi-item>
+</body>
+</html>

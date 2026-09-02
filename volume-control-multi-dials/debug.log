@@ -1,0 +1,636 @@
+2026-09-02T04:32:19.325Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:32:19.337Z sendAudioApps: got 7 sessions
+2026-09-02T04:32:19.342Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:32:19.347Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:32:21.329Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:32:21.340Z sendAudioApps: got 7 sessions
+2026-09-02T04:32:21.346Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:32:21.352Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:32:23.338Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:32:23.351Z sendAudioApps: got 7 sessions
+2026-09-02T04:32:23.358Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:32:23.370Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:32:25.347Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:32:25.358Z sendAudioApps: got 7 sessions
+2026-09-02T04:32:25.363Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:32:25.370Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:32:27.354Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:32:27.364Z sendAudioApps: got 7 sessions
+2026-09-02T04:32:27.369Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:32:27.374Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:32:29.368Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:32:29.379Z sendAudioApps: got 7 sessions
+2026-09-02T04:32:29.383Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:32:29.389Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:32:31.371Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:32:31.381Z sendAudioApps: got 7 sessions
+2026-09-02T04:32:31.388Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:32:31.396Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:32:33.382Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:32:33.392Z sendAudioApps: got 7 sessions
+2026-09-02T04:32:33.397Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:32:33.403Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:32:35.392Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:32:35.401Z sendAudioApps: got 7 sessions
+2026-09-02T04:32:35.406Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:32:35.412Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:32:37.406Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:32:37.417Z sendAudioApps: got 7 sessions
+2026-09-02T04:32:37.424Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:32:37.431Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:32:39.415Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:32:39.424Z sendAudioApps: got 7 sessions
+2026-09-02T04:32:39.434Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:32:39.440Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:32:41.424Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:32:41.437Z sendAudioApps: got 7 sessions
+2026-09-02T04:32:41.468Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:32:41.501Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:32:43.431Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:32:43.442Z sendAudioApps: got 7 sessions
+2026-09-02T04:32:43.454Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:32:43.461Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:32:45.438Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:32:45.450Z sendAudioApps: got 7 sessions
+2026-09-02T04:32:45.479Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:32:45.505Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:32:47.437Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:32:47.449Z sendAudioApps: got 7 sessions
+2026-09-02T04:32:47.455Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:32:47.462Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:32:49.445Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:32:49.472Z sendAudioApps: got 7 sessions
+2026-09-02T04:32:49.500Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:32:49.525Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:32:51.452Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:32:51.478Z sendAudioApps: got 7 sessions
+2026-09-02T04:32:51.499Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:32:51.520Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:32:53.458Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:32:53.489Z sendAudioApps: got 7 sessions
+2026-09-02T04:32:53.520Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:32:53.559Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:32:55.469Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:32:55.493Z sendAudioApps: got 7 sessions
+2026-09-02T04:32:55.514Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:32:55.535Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:32:57.474Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:32:57.499Z sendAudioApps: got 7 sessions
+2026-09-02T04:32:57.520Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:32:57.539Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:32:59.480Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:32:59.502Z sendAudioApps: got 7 sessions
+2026-09-02T04:32:59.524Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:32:59.545Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:01.487Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:01.512Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:01.535Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:01.553Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:03.501Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:03.525Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:03.551Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:03.574Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:05.508Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:05.534Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:05.558Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:05.578Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:07.515Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:07.541Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:07.566Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:07.592Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:09.525Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:09.550Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:09.570Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:09.588Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:11.533Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:11.558Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:11.586Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:11.607Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:13.540Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:13.564Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:13.588Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:13.606Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:15.553Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:15.577Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:15.605Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:15.624Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:17.562Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:17.585Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:17.607Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:17.626Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:19.576Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:19.604Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:19.626Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:19.648Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:21.583Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:21.607Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:21.631Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:21.650Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:23.584Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:23.617Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:23.647Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:23.668Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:25.592Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:25.615Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:25.638Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:25.658Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:27.594Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:27.618Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:27.647Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:27.667Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:29.597Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:29.621Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:29.643Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:29.662Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:31.602Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:31.625Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:31.646Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:31.667Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:33.611Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:33.638Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:33.666Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:33.685Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:35.618Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:35.642Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:35.661Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:35.680Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:37.622Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:37.646Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:37.669Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:37.690Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:39.633Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:39.659Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:39.684Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:39.704Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:41.637Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:41.662Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:41.684Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:41.710Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:43.644Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:43.670Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:43.692Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:43.716Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:45.658Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:45.681Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:45.710Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:45.728Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:47.668Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:47.692Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:47.716Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:47.736Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:49.672Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:49.699Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:49.725Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:49.747Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:51.677Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:51.708Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:51.740Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:51.773Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:53.681Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:53.706Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:53.730Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:53.750Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:55.689Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:55.713Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:55.734Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:55.755Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:57.695Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:57.719Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:57.744Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:57.763Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:33:59.704Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:33:59.728Z sendAudioApps: got 7 sessions
+2026-09-02T04:33:59.757Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:33:59.776Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:01.714Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:01.740Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:01.768Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:01.791Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:03.720Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:03.745Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:03.770Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:03.790Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:05.729Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:05.751Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:05.774Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:05.791Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:07.733Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:07.756Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:07.781Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:07.799Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:09.736Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:09.760Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:09.783Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:09.802Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:11.745Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:11.768Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:11.789Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:11.810Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:13.756Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:13.768Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:13.792Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:13.813Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:15.769Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:15.796Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:15.818Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:15.837Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:17.781Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:17.812Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:17.841Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:17.868Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:19.784Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:19.803Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:19.825Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:19.846Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:21.794Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:21.818Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:21.843Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:21.864Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:23.808Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:23.832Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:23.856Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:23.874Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:25.808Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:25.832Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:25.861Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:25.882Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:27.823Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:27.843Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:27.859Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:27.876Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:29.823Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:29.849Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:29.876Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:29.900Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:31.837Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:31.862Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:31.880Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:31.898Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:33.847Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:33.872Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:33.912Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:33.954Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:35.857Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:35.885Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:35.913Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:35.936Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:37.867Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:37.891Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:37.911Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:37.920Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:39.874Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:39.923Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:39.997Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:40.027Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:41.887Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:41.911Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:41.928Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:41.945Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:43.888Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:43.912Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:43.940Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:43.967Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:45.903Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:45.953Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:45.979Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:46.001Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:47.917Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:47.942Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:47.962Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:47.993Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:49.929Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:49.951Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:49.976Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:49.997Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:51.930Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:51.979Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:52.002Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:52.035Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:53.933Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:53.957Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:53.980Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:53.987Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:55.936Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:55.962Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:55.986Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:56.004Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:57.942Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:57.981Z sendAudioApps: got 7 sessions
+2026-09-02T04:34:58.013Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:34:58.053Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:34:59.955Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:34:59.978Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:00.002Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:00.023Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:01.966Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:01.990Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:02.013Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:02.038Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:03.977Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:04.002Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:04.031Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:04.054Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:05.984Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:06.005Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:06.032Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:06.051Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:07.999Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:08.025Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:08.047Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:08.066Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:10.008Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:10.046Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:10.080Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:10.102Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:12.014Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:12.039Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:12.061Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:12.079Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:14.026Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:14.049Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:14.072Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:14.092Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:16.028Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:16.059Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:16.083Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:16.102Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:18.043Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:18.070Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:18.095Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:18.114Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:20.055Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:20.077Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:20.110Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:20.143Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:22.070Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:22.094Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:22.121Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:22.140Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:24.077Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:24.100Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:24.124Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:24.144Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:26.078Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:26.106Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:26.137Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:26.157Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:28.091Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:28.115Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:28.142Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:28.160Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:30.091Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:30.119Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:30.153Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:30.179Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:32.095Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:32.137Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:32.170Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:32.192Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:34.109Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:34.132Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:34.147Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:34.166Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:36.124Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:36.145Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:36.173Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:36.193Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:38.131Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:38.155Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:38.181Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:38.200Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:40.147Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:40.170Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:40.195Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:40.214Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:42.157Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:42.182Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:42.200Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:42.217Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:44.171Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:44.197Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:44.220Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:44.239Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:46.171Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:46.197Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:46.219Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:46.243Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:48.186Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:48.210Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:48.233Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:48.253Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:50.200Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:50.224Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:50.249Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:50.271Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:52.213Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:52.236Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:52.259Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:52.279Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:54.222Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:54.247Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:54.284Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:54.310Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:56.236Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:56.258Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:56.281Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:56.292Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:35:58.240Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:35:58.265Z sendAudioApps: got 7 sessions
+2026-09-02T04:35:58.291Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:35:58.312Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:00.253Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:00.278Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:00.298Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:00.317Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:02.268Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:02.294Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:02.323Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:02.346Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:04.269Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:04.293Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:04.315Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:04.336Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:06.273Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:06.295Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:06.317Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:06.335Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:08.288Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:08.312Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:08.338Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:08.359Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:10.290Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:10.313Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:10.336Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:10.354Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:12.290Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:12.310Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:12.333Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:12.354Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:14.302Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:14.324Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:14.332Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:14.341Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:16.311Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:16.333Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:16.359Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:16.377Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:18.316Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:18.328Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:18.334Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:18.346Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:20.326Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:20.351Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:20.375Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:20.396Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:22.338Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:22.362Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:22.384Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:22.394Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:24.350Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:24.370Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:24.380Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:24.387Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:26.361Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:26.374Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:26.381Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:26.387Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:28.366Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:28.388Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:28.412Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:28.427Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:30.374Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:30.398Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:30.425Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:30.449Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:32.375Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:32.398Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:32.428Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:32.448Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:34.376Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:34.390Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:34.398Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:34.428Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:36.390Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:36.409Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:36.434Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:36.451Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:38.399Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:38.414Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:38.422Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:38.429Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:40.404Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:40.415Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:40.444Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:40.467Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:42.418Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:42.442Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:42.468Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:42.489Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:44.422Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:44.446Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:44.472Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:44.491Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:46.425Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:46.444Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:46.468Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:46.487Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:48.430Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:48.453Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:48.472Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:48.490Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:50.434Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:50.459Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:50.479Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:50.497Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:52.447Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:52.470Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:52.494Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:52.513Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:54.449Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:54.470Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:54.489Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:54.509Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:56.449Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:56.475Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:56.499Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:56.519Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:36:58.460Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:36:58.479Z sendAudioApps: got 7 sessions
+2026-09-02T04:36:58.497Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:36:58.528Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:37:00.461Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:37:00.484Z sendAudioApps: got 7 sessions
+2026-09-02T04:37:00.507Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:37:00.531Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:37:02.471Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:37:02.495Z sendAudioApps: got 7 sessions
+2026-09-02T04:37:02.522Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:37:02.542Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:37:04.485Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:37:04.521Z sendAudioApps: got 7 sessions
+2026-09-02T04:37:04.566Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:37:04.610Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:37:06.487Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:37:06.496Z sendAudioApps: got 7 sessions
+2026-09-02T04:37:06.500Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:37:06.506Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:37:08.497Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:37:08.507Z sendAudioApps: got 7 sessions
+2026-09-02T04:37:08.511Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:37:08.515Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:37:10.509Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:37:10.518Z sendAudioApps: got 7 sessions
+2026-09-02T04:37:10.524Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:37:10.529Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:37:12.520Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:37:12.531Z sendAudioApps: got 7 sessions
+2026-09-02T04:37:12.536Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:37:12.542Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:37:14.520Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:37:14.531Z sendAudioApps: got 7 sessions
+2026-09-02T04:37:14.536Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:37:14.542Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:37:16.525Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:37:16.536Z sendAudioApps: got 7 sessions
+2026-09-02T04:37:16.541Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:37:16.546Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:37:18.533Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:37:18.544Z sendAudioApps: got 7 sessions
+2026-09-02T04:37:18.549Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:37:18.555Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:37:20.539Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:37:20.550Z sendAudioApps: got 7 sessions
+2026-09-02T04:37:20.555Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:37:20.560Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:37:22.548Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:37:22.559Z sendAudioApps: got 7 sessions
+2026-09-02T04:37:22.564Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:37:22.569Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:37:24.560Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:37:24.570Z sendAudioApps: got 7 sessions
+2026-09-02T04:37:24.576Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:37:24.581Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:37:26.564Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:37:26.575Z sendAudioApps: got 7 sessions
+2026-09-02T04:37:26.580Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:37:26.585Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:37:28.571Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:37:28.582Z sendAudioApps: got 7 sessions
+2026-09-02T04:37:28.588Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:37:28.596Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:37:30.572Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:37:30.583Z sendAudioApps: got 7 sessions
+2026-09-02T04:37:30.589Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:37:30.595Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:37:32.577Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:37:32.588Z sendAudioApps: got 7 sessions
+2026-09-02T04:37:32.595Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:37:32.602Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:37:34.590Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:37:34.604Z sendAudioApps: got 7 sessions
+2026-09-02T04:37:34.610Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:37:34.616Z sendAudioApps: sendToPropertyInspector resolved
+2026-09-02T04:37:36.602Z sendAudioApps: calling getAudioSessionProcesses
+2026-09-02T04:37:36.613Z sendAudioApps: got 7 sessions
+2026-09-02T04:37:36.619Z sendAudioApps: sending 6 items to PI, action=[object Object]
+2026-09-02T04:37:36.626Z sendAudioApps: sendToPropertyInspector resolved
