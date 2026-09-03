@@ -80,6 +80,10 @@
         .app-picker-item:hover {
             background: #454545;
         }
+        .app-picker-item-inactive span {
+            opacity: 0.6;
+            font-style: italic;
+        }
         .app-picker-item img {
             width: 18px;
             height: 18px;
@@ -121,7 +125,7 @@
     <sdpi-item label="Application">
         <div class="applications-container" id="applications-container"></div>
     </sdpi-item>
-    <p>Only apps currently playing audio are listed here.</p>
+    <p>Apps must play audio at least once to be detected. Previously-seen apps stay listed (marked "not running") even after they close.</p>
 
     <sdpi-item label="Volume">
         <sdpi-range setting="volume" min="0" max="100" step="1" default="50" showlabels>
@@ -146,8 +150,21 @@
             const initial = await client.getSettings();
             let applications = Array.isArray(initial.settings.applications) ? initial.settings.applications.slice() : [];
             let items = [];
+            let known = [];
             let itemsLoaded = false;
             const pickers = [];
+
+            // Icon paths from the plugin are relative to the plugin root (e.g.
+            // "imgs/actions/volume/dynamic/aces.exe.png"), but this page lives one level down in ui/.
+            function iconSrc(relativePath) {
+                return relativePath ? `../${relativePath}` : undefined;
+            }
+
+            // Prefer the live (currently-running) entry, but fall back to the persisted "known" cache
+            // so an already-configured app keeps showing its label/icon after it stops running.
+            function findAppInfo(value) {
+                return items.find((item) => item.value === value) || known.find((item) => item.value === value);
+            }
 
             async function fetchItems() {
                 await client.send("sendToPlugin", { event: "getAudioApps" });
@@ -156,6 +173,7 @@
             client.sendToPropertyInspector.subscribe((message) => {
                 if (message.payload && message.payload.event === "getAudioApps") {
                     items = message.payload.items || [];
+                    known = message.payload.known || [];
                     itemsLoaded = true;
                     pickers.forEach((picker) => picker.refresh());
                 }
@@ -218,10 +236,10 @@
                 row.appendChild(removeBtn);
 
                 function renderButton() {
-                    const match = items.find((item) => item.value === value);
+                    const match = findAppInfo(value);
                     labelEl.textContent = match ? match.label : (value || "Select an application");
                     if (match && match.icon) {
-                        iconEl.src = match.icon;
+                        iconEl.src = iconSrc(match.icon);
                         iconEl.hidden = false;
                     } else {
                         iconEl.hidden = true;
@@ -229,15 +247,27 @@
                     removeBtn.hidden = !value;
                 }
 
+                // Offers both apps currently playing audio and every app previously seen (from the
+                // persisted icon cache), so a dial can be pre-configured for a game before it's running.
+                // Live entries win when the same app appears in both, since their icon/label can't be stale.
+                function mergedApps() {
+                    const merged = new Map();
+                    items.forEach((item) => merged.set(item.value, { ...item, isRunning: true }));
+                    known.forEach((item) => {
+                        if (!merged.has(item.value)) merged.set(item.value, { ...item, isRunning: false });
+                    });
+                    return Array.from(merged.values()).sort((a, b) => a.label.localeCompare(b.label));
+                }
+
                 function renderList() {
                     list.innerHTML = "";
                     const excluded = new Set(otherSelectedValues(index));
-                    const available = items.filter((item) => !excluded.has(item.value));
+                    const available = mergedApps().filter((item) => !excluded.has(item.value));
 
                     if (available.length === 0) {
                         const empty = document.createElement("div");
                         empty.className = "app-picker-empty";
-                        empty.textContent = itemsLoaded ? "No other apps currently playing audio" : "Detecting running apps...";
+                        empty.textContent = itemsLoaded ? "No other apps available yet" : "Detecting running apps...";
                         list.appendChild(empty);
                         return;
                     }
@@ -245,15 +275,16 @@
                     available.forEach((item) => {
                         const itemRow = document.createElement("div");
                         itemRow.className = "app-picker-item";
+                        if (!item.isRunning) itemRow.classList.add("app-picker-item-inactive");
 
                         if (item.icon) {
                             const img = document.createElement("img");
-                            img.src = item.icon;
+                            img.src = iconSrc(item.icon);
                             itemRow.appendChild(img);
                         }
 
                         const span = document.createElement("span");
-                        span.textContent = item.label;
+                        span.textContent = item.isRunning ? item.label : `${item.label} (not running)`;
                         itemRow.appendChild(span);
 
                         itemRow.addEventListener("click", () => {
@@ -326,6 +357,10 @@
             }
 
             rebuildAll();
+
+            // Fetch the app list as soon as the property inspector opens, rather than waiting for the
+            // user to click a picker - otherwise already-selected rows show no icon until first clicked.
+            fetchItems();
 
             document.addEventListener("click", () => {
                 document.querySelectorAll(".app-picker-list").forEach((el) => {

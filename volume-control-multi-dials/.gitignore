@@ -5,3 +5,7 @@ node_modules/
 *.sdPlugin/bin
 *.sdPlugin/logs
 *.sdPlugin/imgs/actions/volume/dynamic/
+
+# node-gyp build workspace for the patched native module (see patches/node-audio-volume-mixer/README.md) -
+# only its small source files and the final compiled addon.node are meant to be committed.
+patches/node-audio-volume-mixer-src/build/

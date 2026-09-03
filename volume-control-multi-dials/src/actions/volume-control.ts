@@ -22,6 +22,15 @@ const execFileAsync = promisify(execFile);
 
 const AUDIO_APPS_DATASOURCE = "getAudioApps";
 
+/**
+ * Wraps NodeAudioVolumeMixer.getAudioSessionProcesses(), dropping the odd session Windows reports
+ * with pid 0 (the reserved System Idle Process id, which no process can ever resolve a name for -
+ * unrelated to any app, harmless, and not worth surfacing anywhere).
+ */
+function getNamedAudioSessions(): { pid: number; name: string }[] {
+	return NodeAudioVolumeMixer.getAudioSessionProcesses().filter((session) => session.pid !== 0 && session.name);
+}
+
 // This file compiles to <sdPlugin>/bin/plugin.js, so the plugin's own root is one directory up.
 const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DYNAMIC_ICON_DIR = path.join(PLUGIN_ROOT, "imgs", "actions", "volume", "dynamic");
@@ -179,12 +188,16 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 	 * "Application" picker - each with its own icon, so the picker can show it next to the app's name.
 	 * Only apps actively producing sound have a session (same as the Windows volume mixer), so a
 	 * silent app won't show up until it plays something.
+	 *
+	 * Also sends `known`: every app ever cached, running or not, so the property inspector can still
+	 * show the label/icon for an already-configured app even after it stops running (it just won't be
+	 * offered as a new pick until it's producing audio again).
 	 */
 	private async sendAudioApps(): Promise<void> {
 		let items: { value: string; label: string; icon?: string }[] = [];
 
 		try {
-			const sessions = NodeAudioVolumeMixer.getAudioSessionProcesses();
+			const sessions = getNamedAudioSessions();
 			const seen = new Set<string>();
 			const deduped = sessions.filter((session) => {
 				const key = session.name.toLowerCase();
@@ -196,12 +209,17 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 			items = await Promise.all(
 				deduped.map(async (session) => {
 					const key = session.name.toLowerCase();
-					let icon = iconCache.get(key);
-					if (!icon) {
-						icon = await extractIconForPid(session.pid).catch(() => undefined);
-						if (icon) iconCache.set(key, icon);
+					let cached = iconCache.get(key);
+					if (!cached) {
+						const dataUri = await extractIconForPid(session.pid).catch(() => undefined);
+						const savedPath = dataUri ? saveIconFile(key, dataUri) : undefined;
+						if (savedPath) {
+							cached = { exeName: session.name, path: savedPath };
+							iconCache.set(key, cached);
+							persistIconCache();
+						}
 					}
-					return { value: session.name, label: prettifyAppName(session.name), icon };
+					return { value: session.name, label: prettifyAppName(session.name), icon: cached?.path };
 				})
 			);
 			items.sort((a, b) => a.label.localeCompare(b.label));
@@ -209,7 +227,13 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 			streamDeck.logger.error("Failed to list audio sessions", error);
 		}
 
-		streamDeck.ui.sendToPropertyInspector({ event: AUDIO_APPS_DATASOURCE, items });
+		const known = Array.from(iconCache.values()).map((cached) => ({
+			value: cached.exeName,
+			label: prettifyAppName(cached.exeName),
+			icon: cached.path
+		}));
+
+		streamDeck.ui.sendToPropertyInspector({ event: AUDIO_APPS_DATASOURCE, items, known });
 	}
 
 	/**
@@ -227,7 +251,7 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 
 		let sessions;
 		try {
-			sessions = NodeAudioVolumeMixer.getAudioSessionProcesses();
+			sessions = getNamedAudioSessions();
 		} catch (error) {
 			streamDeck.logger.error("Failed to read audio sessions", error);
 			return;
@@ -247,19 +271,43 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 }
 
 /**
- * Caches each app's extracted icon (as a base64 data URI) by lowercased exe name, for use in the
- * property inspector's app picker list. Only extracted once per app per plugin session.
+ * An icon already extracted and saved to disk for one app, keyed by lowercased exe name.
  */
-const iconCache = new Map<string, string>();
+type CachedIcon = {
+	/** The exe name in its original casing, e.g. "aces.exe" - used as the picker's `value`. */
+	exeName: string;
+	/** Path to the saved PNG, relative to the plugin root, e.g. "imgs/actions/volume/dynamic/aces.exe.png". */
+	path: string;
+};
 
 /**
- * Caches each app's extracted icon as a *file path* (relative to the plugin's own folder), for use in
- * the dial's on-device feedback specifically. Kept separate from iconCache (which holds base64 data
- * URIs for the property inspector) because Stream Deck's device rendering was found to not reliably
- * redraw the icon layer when repeatedly fed different base64 blobs via setFeedback, but does update
- * correctly when given a file path - see extractIconForPid/saveIconFile below.
+ * Persisted (disk-backed) cache of extracted app icons, keyed by lowercased exe name. Used both for the
+ * dial's on-device feedback and the property inspector's app picker, so an icon is only ever extracted
+ * once per app - and, being file-backed rather than in-memory, survives both the app closing (so a
+ * previously-picked app keeps showing its icon even once it's no longer running) and the plugin process
+ * itself restarting (build/deploy, Stream Deck relaunch, etc).
  */
-const dialIconPathCache = new Map<string, string>();
+const ICON_CACHE_FILE = path.join(DYNAMIC_ICON_DIR, "icon-cache.json");
+
+function loadIconCache(): Map<string, CachedIcon> {
+	try {
+		const raw = fs.readFileSync(ICON_CACHE_FILE, "utf-8");
+		return new Map(Object.entries(JSON.parse(raw) as Record<string, CachedIcon>));
+	} catch {
+		return new Map();
+	}
+}
+
+function persistIconCache(): void {
+	try {
+		fs.mkdirSync(DYNAMIC_ICON_DIR, { recursive: true });
+		fs.writeFileSync(ICON_CACHE_FILE, JSON.stringify(Object.fromEntries(iconCache), null, 2));
+	} catch (error) {
+		streamDeck.logger.error("Failed to persist icon cache", error);
+	}
+}
+
+const iconCache = loadIconCache();
 const iconResolutionInFlight = new Set<string>();
 
 /**
@@ -282,7 +330,7 @@ function findRunningApp(applications: string[] | undefined): string | undefined 
 
 	let sessions;
 	try {
-		sessions = NodeAudioVolumeMixer.getAudioSessionProcesses();
+		sessions = getNamedAudioSessions();
 	} catch {
 		return undefined;
 	}
@@ -305,7 +353,7 @@ function updateFeedback(action: DialAction<VolumeSettings>, settings: VolumeSett
 	const barValue = settings.isMuted ? 0 : volume;
 	const runningApp = findRunningApp(settings.applications);
 	const appKey = runningApp?.toLowerCase();
-	const iconPath = appKey ? dialIconPathCache.get(appKey) : undefined;
+	const iconPath = appKey ? iconCache.get(appKey)?.path : undefined;
 
 	const feedback: FeedbackPayload = {
 		title: settings.isMuted ? "Muted" : "Multi Volume",
@@ -319,11 +367,10 @@ function updateFeedback(action: DialAction<VolumeSettings>, settings: VolumeSett
 		resolveAppIcon(runningApp)
 			.then((dataUri) => {
 				if (!dataUri) return;
-				iconCache.set(appKey, dataUri);
-
 				const savedPath = saveIconFile(appKey, dataUri);
 				if (!savedPath) return;
-				dialIconPathCache.set(appKey, savedPath);
+				iconCache.set(appKey, { exeName: runningApp, path: savedPath });
+				persistIconCache();
 
 				// The app that triggered this may have stopped running (or been replaced by a
 				// higher-priority one) while extraction was in flight - re-check live rather than
@@ -363,7 +410,7 @@ function saveIconFile(appKey: string, dataUri: string): string | undefined {
 async function resolveAppIcon(appName: string): Promise<string | undefined> {
 	let sessions;
 	try {
-		sessions = NodeAudioVolumeMixer.getAudioSessionProcesses();
+		sessions = getNamedAudioSessions();
 	} catch {
 		return undefined;
 	}
@@ -375,19 +422,58 @@ async function resolveAppIcon(appName: string): Promise<string | undefined> {
 }
 
 /**
+ * Resolves a process's own executable path via the Win32 QueryFullProcessImageName API, requesting
+ * only PROCESS_QUERY_LIMITED_INFORMATION - the same low-privilege access Task Manager and the Windows
+ * Volume Mixer use to show a name/icon for processes they otherwise can't inspect. This succeeds for
+ * anti-cheat-protected games (e.g. War Thunder's BattlEye-guarded `aces.exe`) where `Get-Process`'s
+ * `.Path`/`.MainModule` and CIM's `Win32_Process.ExecutablePath` both come back empty, because those
+ * need to open the process with PROCESS_VM_READ/enumerate its modules - a much higher bar that such
+ * anti-tamper protection specifically blocks. Confirmed against a live `aces.exe`: this call resolved
+ * its real path while both of those alternatives returned nothing.
+ */
+const PROC_PATH_HELPER_TYPE = `
+Add-Type -TypeDefinition @'
+using System;
+using System.Text;
+using System.Runtime.InteropServices;
+public static class ProcPath {
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern IntPtr OpenProcess(uint access, bool inherit, int pid);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool QueryFullProcessImageName(IntPtr hProcess, uint flags, StringBuilder name, ref int size);
+    [DllImport("kernel32.dll")]
+    public static extern bool CloseHandle(IntPtr hObject);
+    public static string GetPath(int pid) {
+        IntPtr h = OpenProcess(0x1000, false, pid);
+        if (h == IntPtr.Zero) return null;
+        try {
+            var sb = new StringBuilder(1024);
+            int size = sb.Capacity;
+            if (!QueryFullProcessImageName(h, 0, sb, ref size)) return null;
+            return sb.ToString();
+        } finally { CloseHandle(h); }
+    }
+}
+'@
+`.trim();
+
+/**
  * Extracts the icon associated with a running process's executable, as a base64 PNG data URI.
  * Shells out to PowerShell/System.Drawing since there's no native Node API for this on Windows.
  */
 async function extractIconForPid(pid: number): Promise<string | undefined> {
 	const script = [
+		PROC_PATH_HELPER_TYPE,
 		"Add-Type -AssemblyName System.Drawing",
-		`$p = Get-Process -Id ${pid} -ErrorAction Stop`,
-		"$icon = [System.Drawing.Icon]::ExtractAssociatedIcon($p.Path)",
+		`$path = [ProcPath]::GetPath(${pid})`,
+		`if (-not $path) { $path = (Get-Process -Id ${pid} -ErrorAction Stop).Path }`,
+		'if (-not $path) { throw "Could not resolve executable path" }',
+		"$icon = [System.Drawing.Icon]::ExtractAssociatedIcon($path)",
 		"$bmp = $icon.ToBitmap()",
 		"$ms = New-Object System.IO.MemoryStream",
 		"$bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)",
 		"[Convert]::ToBase64String($ms.ToArray())"
-	].join("; ");
+	].join("\n");
 
 	try {
 		const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {

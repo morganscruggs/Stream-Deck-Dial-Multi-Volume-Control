@@ -3,13 +3,25 @@ Add-Type -AssemblyName System.Drawing
 function New-ComboIcon {
     param(
         [int]$Size,
-        [string]$OutPath
+        [string]$OutPath,
+        [switch]$WithBackground
     )
 
     $bmp = [System.Drawing.Bitmap]::new($Size, $Size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $g.Clear([System.Drawing.Color]::Transparent)
+
+    if ($WithBackground) {
+        $bgBrush = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+            [System.Drawing.Point]::new(0, 0),
+            [System.Drawing.Point]::new($Size, $Size),
+            [System.Drawing.Color]::FromArgb(255, 43, 47, 56),
+            [System.Drawing.Color]::FromArgb(255, 20, 22, 28)
+        )
+        $g.FillRectangle($bgBrush, 0, 0, $Size, $Size)
+        $bgBrush.Dispose()
+    }
 
     $scale = $Size / 100.0
     $white = [System.Drawing.Color]::White
@@ -59,10 +71,21 @@ function New-ComboIcon {
 $outDir = "X:\-- WORK\-- GitHub\Stream-Deck-Dial-Multi-Volume-Control\volume-control-multi-dials\scripts"
 New-ComboIcon -Size 144 -OutPath "$outDir\combo-icon.png"
 
-$actionDir = "X:\-- WORK\-- GitHub\Stream-Deck-Dial-Multi-Volume-Control\volume-control-multi-dials\com.morgan-scruggs.volume-control-multi-dials.sdPlugin\imgs\actions\volume"
-New-ComboIcon -Size 20 -OutPath "$actionDir\icon.png"
-New-ComboIcon -Size 40 -OutPath "$actionDir\icon@2x.png"
-New-ComboIcon -Size 72 -OutPath "$actionDir\key.png"
-New-ComboIcon -Size 144 -OutPath "$actionDir\key@2x.png"
+$pluginRoot = "X:\-- WORK\-- GitHub\Stream-Deck-Dial-Multi-Volume-Control\volume-control-multi-dials\com.morgan-scruggs.volume-control-multi-dials.sdPlugin\imgs"
 
-Write-Output "Generated combo-icon.png and updated action icons in $actionDir"
+# Volume action icons.
+$volumeDir = "$pluginRoot\actions\volume"
+New-ComboIcon -Size 20 -OutPath "$volumeDir\icon.png"
+New-ComboIcon -Size 40 -OutPath "$volumeDir\icon@2x.png"
+New-ComboIcon -Size 72 -OutPath "$volumeDir\key.png"
+New-ComboIcon -Size 144 -OutPath "$volumeDir\key@2x.png"
+
+
+# Plugin-level icons.
+$pluginDir = "$pluginRoot\plugin"
+New-ComboIcon -Size 28 -OutPath "$pluginDir\category-icon.png"
+New-ComboIcon -Size 56 -OutPath "$pluginDir\category-icon@2x.png"
+New-ComboIcon -Size 288 -OutPath "$pluginDir\marketplace.png" -WithBackground
+New-ComboIcon -Size 512 -OutPath "$pluginDir\marketplace@2x.png" -WithBackground
+
+Write-Output "Generated combo-icon.png and updated all plugin icons under $pluginRoot"

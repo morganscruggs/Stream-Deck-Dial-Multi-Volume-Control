@@ -48,6 +48,20 @@ const config = {
 						fs.cpSync(src, dest, { recursive: true });
 					} catch (error) {
 						console.warn(`Skipped updating ${moduleName} (likely locked by the running plugin): ${error.message}`);
+						continue;
+					}
+
+					// Overlay our patched build of node-audio-volume-mixer's native addon (fixes process
+					// name lookups failing against protected processes, e.g. anti-cheat-guarded games -
+					// see patches/node-audio-volume-mixer/README.md) over whatever npm just installed.
+					if (moduleName === "node-audio-volume-mixer") {
+						const patchedAddon = path.join("patches", "node-audio-volume-mixer", "addon.node");
+						const addonDest = path.join(dest, "build", "Release", "addon.node");
+						try {
+							fs.copyFileSync(patchedAddon, addonDest);
+						} catch (error) {
+							console.warn(`Failed to apply patched node-audio-volume-mixer addon: ${error.message}`);
+						}
 					}
 				}
 			}

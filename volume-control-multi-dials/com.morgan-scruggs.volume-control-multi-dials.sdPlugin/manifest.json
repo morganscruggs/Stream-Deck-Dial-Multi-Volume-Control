@@ -39,10 +39,6 @@
 	},
 	"OS": [
 		{
-			"Platform": "mac",
-			"MinimumVersion": "12"
-		},
-		{
 			"Platform": "windows",
 			"MinimumVersion": "10"
 		}
