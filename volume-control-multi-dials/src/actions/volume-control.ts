@@ -7,6 +7,7 @@ import streamDeck, {
 	FeedbackPayload,
 	SendToPluginEvent,
 	SingletonAction,
+	TitleParametersDidChangeEvent,
 	WillAppearEvent,
 	WillDisappearEvent,
 	TouchTapEvent
@@ -33,7 +34,17 @@ function getNamedAudioSessions(): { pid: number; name: string }[] {
 
 // This file compiles to <sdPlugin>/bin/plugin.js, so the plugin's own root is one directory up.
 const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const DYNAMIC_ICON_DIR = path.join(PLUGIN_ROOT, "imgs", "actions", "volume", "dynamic");
+
+/**
+ * Where extracted app icons (and their cache index) are written - deliberately *outside* the plugin's
+ * own installed folder, under the user's local app data. Marketplace-distributed plugins are installed
+ * from a DRM-protected package, so the plugin's own folder can't be assumed writable at runtime; this
+ * also keeps this dev machine's cached icons (aces.exe, chrome.exe, etc.) out of the packaged
+ * `.streamDeckPlugin` file entirely, since they'd otherwise sit inside the bundled `.sdPlugin` folder
+ * and ship to every user. `%APPDATA%` is always defined on Windows, which is this plugin's only
+ * supported OS (see manifest.json).
+ */
+const DYNAMIC_ICON_DIR = path.join(process.env.APPDATA ?? PLUGIN_ROOT, "com.morgan-scruggs.volume-control-multi-dials", "icons");
 
 /**
  * Action that controls the volume of one or more applications at once using a single dial.
@@ -76,6 +87,24 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 	override onWillDisappear(ev: WillDisappearEvent<VolumeSettings>): void {
 		this.stopPolling(ev.action.id);
 		this.lastSettings.delete(ev.action.id);
+		nativeTitleByAction.delete(ev.action.id);
+	}
+
+	/**
+	 * Tracks the title text the user has set via Stream Deck's own native title editor for this dial,
+	 * so "Top Application Name"/"Both" title modes can restore or build on it (see {@link updateFeedback}
+	 * and {@link nativeTitleByAction}). Fires only on the user's own edits, not on our own setFeedback
+	 * calls, so this never becomes a feedback loop.
+	 */
+	override onTitleParametersDidChange(ev: TitleParametersDidChangeEvent<VolumeSettings>): void {
+		nativeTitleByAction.set(ev.action.id, ev.payload.title);
+
+		const settings = this.lastSettings.get(ev.action.id);
+		if (settings && ev.action.isDial()) {
+			updateFeedback(ev.action, settings).catch((error) =>
+				streamDeck.logger.error("Failed to refresh dial feedback after title change", error)
+			);
+		}
 	}
 
 	private startPolling(action: DialAction<VolumeSettings>): void {
@@ -125,7 +154,7 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 			settings.previousVolume = undefined;
 		}
 
-		const stepSize = settings.stepSize ?? 1;
+		const stepSize = settings.stepSize ?? 5;
 		const currentVolume = settings.volume ?? 50;
 		settings.volume = Math.max(0, Math.min(100, currentVolume + ev.payload.ticks * stepSize));
 
@@ -219,7 +248,11 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 							persistIconCache();
 						}
 					}
-					return { value: session.name, label: prettifyAppName(session.name), icon: cached?.path };
+					return {
+						value: session.name,
+						label: prettifyAppName(session.name),
+						icon: cached ? readIconAsDataUri(cached.path) : undefined
+					};
 				})
 			);
 			items.sort((a, b) => a.label.localeCompare(b.label));
@@ -230,7 +263,7 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 		const known = Array.from(iconCache.values()).map((cached) => ({
 			value: cached.exeName,
 			label: prettifyAppName(cached.exeName),
-			icon: cached.path
+			icon: readIconAsDataUri(cached.path)
 		}));
 
 		streamDeck.ui.sendToPropertyInspector({ event: AUDIO_APPS_DATASOURCE, items, known });
@@ -276,7 +309,7 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 type CachedIcon = {
 	/** The exe name in its original casing, e.g. "aces.exe" - used as the picker's `value`. */
 	exeName: string;
-	/** Path to the saved PNG, relative to the plugin root, e.g. "imgs/actions/volume/dynamic/aces.exe.png". */
+	/** Absolute path to the saved PNG under {@link DYNAMIC_ICON_DIR}. */
 	path: string;
 };
 
@@ -311,16 +344,64 @@ const iconCache = loadIconCache();
 const iconResolutionInFlight = new Set<string>();
 
 /**
+ * Last-known text of each dial's *native* Stream Deck title (the one the user edits directly in the
+ * Stream Deck app, with its own font/color/alignment options - distinct from this plugin's own
+ * settings). Populated only by {@link VolumeControl.onTitleParametersDidChange}, which fires on the
+ * user's own edits; there's no way to read this value up front (e.g. on `willAppear`), so a dial whose
+ * native title was set before ever hitting this code path - and never touched again - stays unknown
+ * (treated as blank) until the user edits it at least once.
+ */
+const nativeTitleByAction = new Map<string, string>();
+
+/**
  * Generic mixer glyph shown on the dial when none of the configured apps are currently running - the
- * same speaker + fader-lines combo icon used as the action's main icon (see manifest.json), referenced
- * as a file rather than embedded base64 for the same redraw-reliability reason as dialIconPathCache.
+ * same speaker + fader-lines combo icon used as the action's main icon (see manifest.json). Referenced
+ * as a file path (rather than embedded base64) since Stream Deck's device rendering doesn't reliably
+ * redraw the icon layer when repeatedly fed different base64 blobs via setFeedback, but does update
+ * correctly when given a file path.
  */
 const DEFAULT_MIXER_ICON_PATH = "imgs/actions/volume/key@2x.png";
+const DEFAULT_MIXER_ICON_ABS_PATH = path.join(PLUGIN_ROOT, DEFAULT_MIXER_ICON_PATH);
 
 /**
  * Muted/inactive fill color for the dial's progress bar when none of the configured apps are running.
  */
 const INACTIVE_BAR_COLOR = "#5a5a5a";
+
+/**
+ * Color of the diagonal "muted" slash drawn over the icon.
+ */
+const MUTE_SLASH_COLOR = "#ff3b30";
+
+/**
+ * Builds a version of the given icon with a red diagonal line through it (top-left to bottom-right), for
+ * the dial's icon while muted. Embeds the icon's own PNG bytes as a data URI inside an `<image>` and
+ * draws the slash on top of it, rather than needing to pre-render and cache a separate "-muted" PNG
+ * variant per app. Encoded as a base64 `data:image/svg+xml` URI - matching the SDK docs' own example
+ * for an SVG Pixmap value - rather than a bare `<svg>` string, and declares `xlink:href` alongside the
+ * plain `href` on `<image>` for compatibility with SVG 1.1-only renderers.
+ */
+function buildMutedIcon(iconAbsPath: string): string | undefined {
+	const dataUri = readIconAsDataUri(iconAbsPath);
+	if (!dataUri) return undefined;
+
+	const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 100 100" width="100" height="100">
+<image xlink:href="${dataUri}" href="${dataUri}" x="0" y="0" width="100" height="100" preserveAspectRatio="xMidYMid meet" />
+<line x1="6" y1="6" x2="94" y2="94" stroke="${MUTE_SLASH_COLOR}" stroke-width="9" stroke-linecap="round" />
+</svg>`;
+
+	return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+}
+
+/**
+ * Resolves the icon to actually hand to `setFeedback`: the plain file path when unmuted, or the
+ * slashed-icon SVG (see {@link buildMutedIcon}) when muted - falling back to the plain path if reading
+ * the source file for the overlay fails for some reason.
+ */
+function resolveIconFeedbackValue(iconAbsPath: string, isMuted: boolean): string {
+	if (!isMuted) return iconAbsPath;
+	return buildMutedIcon(iconAbsPath) ?? iconAbsPath;
+}
 
 /**
  * Finds the first configured app (in list order) that's currently running/has an audio session.
@@ -348,10 +429,17 @@ function findRunningApp(applications: string[] | undefined): string | undefined 
  * happens off to the side rather than being awaited here, so a not-yet-cached icon never delays the
  * rest of the feedback update - once it resolves, feedback is sent again with the icon included.
  *
- * The title area supports three modes (see `VolumeSettings.titleMode`): a fixed custom title (default,
- * matching the original behaviour), the name of the top running app, or both joined on one line (the
- * dial only ever uses the built-in "$B1" layout here, which has a single title field, so "both" can't
- * be genuinely left/right-justified without a custom layout).
+ * Title logic: the user's own text from Stream Deck's native title editor always wins when present -
+ * this plugin doesn't touch the title at all in that case. Only when that native field is empty does
+ * the plugin fill it in: the top running app's name, or "Multi Volume Dial" if nothing configured is
+ * currently running. Muting still overrides all of that to "Muted", restoring the previous text once
+ * unmuted (see {@link nativeTitleByAction}) rather than leaving "Muted" on screen forever.
+ *
+ * Note: Stream Deck only lets a plugin actually change the on-device title while the user hasn't typed
+ * their own text into its native title editor - once they have, further plugin `setFeedback` calls for
+ * "title" are silently ignored until the user edits it again (or clears it). So the app-name/fallback
+ * text above only visibly takes effect while that native field is empty; this is a platform rule, not
+ * something this plugin can override without abandoning the built-in "$B1" layout entirely.
  */
 function updateFeedback(action: DialAction<VolumeSettings>, settings: VolumeSettings): Promise<void> {
 	const volume = settings.volume ?? 50;
@@ -360,23 +448,33 @@ function updateFeedback(action: DialAction<VolumeSettings>, settings: VolumeSett
 	const appKey = runningApp?.toLowerCase();
 	const iconPath = appKey ? iconCache.get(appKey)?.path : undefined;
 
-	const titleMode = settings.titleMode ?? "custom";
-	const customTitle = settings.customTitle || "Multi Volume";
-	const appName = runningApp ? prettifyAppName(runningApp) : "No app running";
+	const appName = runningApp ? prettifyAppName(runningApp) : undefined;
+	const nativeTitle = nativeTitleByAction.get(action.id) ?? "";
 
 	let title: string;
-	if (titleMode === "both") {
-		title = `${settings.isMuted ? "Muted" : customTitle} – ${appName}`;
+	if (settings.isMuted) {
+		title = "Muted";
+	} else if (nativeTitle) {
+		title = nativeTitle;
 	} else {
-		const base = titleMode === "app" ? appName : customTitle;
-		title = settings.isMuted ? "Muted" : base;
+		title = appName ?? "Multi Volume Dial";
 	}
+
+	// The bar and % text are dimmed to the same grey both when muted and when nothing is running - in
+	// both cases the number on screen isn't the audible volume, so it shouldn't read as "active".
+	//
+	// Both are always sent as full objects (never a bare string/number) so the color/bar_fill_c is
+	// explicitly asserted every time, including back to "active" - Stream Deck only updates the field(s)
+	// present in a given setFeedback call, so a bare value here would leave a previous dimmed color
+	// stuck on screen instead of resetting it once unmuted.
+	const isDimmed = settings.isMuted || !runningApp;
+	const dimColor = isDimmed ? INACTIVE_BAR_COLOR : "white";
 
 	const feedback: FeedbackPayload = {
 		title,
-		value: settings.isMuted ? "Muted" : `${volume}%`,
-		indicator: runningApp ? barValue : { value: barValue, bar_fill_c: INACTIVE_BAR_COLOR },
-		icon: iconPath ?? DEFAULT_MIXER_ICON_PATH
+		value: { value: `${volume}%`, color: dimColor },
+		indicator: { value: barValue, bar_fill_c: dimColor },
+		icon: resolveIconFeedbackValue(iconPath ?? DEFAULT_MIXER_ICON_ABS_PATH, settings.isMuted ?? false)
 	};
 
 	if (runningApp && appKey && !iconPath && !iconResolutionInFlight.has(appKey)) {
@@ -393,7 +491,7 @@ function updateFeedback(action: DialAction<VolumeSettings>, settings: VolumeSett
 				// higher-priority one) while extraction was in flight - re-check live rather than
 				// blindly applying a stale snapshot, which would clobber a more recent, correct update.
 				if (findRunningApp(settings.applications) !== runningApp) return;
-				return action.setFeedback({ ...feedback, icon: savedPath });
+				return action.setFeedback({ ...feedback, icon: resolveIconFeedbackValue(savedPath, settings.isMuted ?? false) });
 			})
 			.catch((error) => streamDeck.logger.error(`Failed to load icon for ${runningApp}`, error))
 			.finally(() => iconResolutionInFlight.delete(appKey));
@@ -403,8 +501,8 @@ function updateFeedback(action: DialAction<VolumeSettings>, settings: VolumeSett
 }
 
 /**
- * Writes an extracted icon (base64 data URI) to a file under the plugin's own imgs folder, returning
- * its path relative to the plugin root - suitable for use as a Pixmap layout item's value.
+ * Writes an extracted icon (base64 data URI) to a file under {@link DYNAMIC_ICON_DIR}, returning its
+ * absolute path - suitable for use as a Pixmap layout item's value.
  */
 function saveIconFile(appKey: string, dataUri: string): string | undefined {
 	const match = /^data:image\/png;base64,(.+)$/.exec(dataUri);
@@ -413,10 +511,24 @@ function saveIconFile(appKey: string, dataUri: string): string | undefined {
 	try {
 		fs.mkdirSync(DYNAMIC_ICON_DIR, { recursive: true });
 		const fileName = `${appKey.replace(/[^a-z0-9.-]/gi, "_")}.png`;
-		fs.writeFileSync(path.join(DYNAMIC_ICON_DIR, fileName), Buffer.from(match[1], "base64"));
-		return `imgs/actions/volume/dynamic/${fileName}`;
+		const filePath = path.join(DYNAMIC_ICON_DIR, fileName);
+		fs.writeFileSync(filePath, Buffer.from(match[1], "base64"));
+		return filePath;
 	} catch (error) {
 		streamDeck.logger.error(`Failed to save icon file for ${appKey}`, error);
+		return undefined;
+	}
+}
+
+/**
+ * Reads a previously-saved icon file back as a base64 data URI, for handing to the property inspector
+ * (a browser context, where a data URI is simpler and more portable than a filesystem path).
+ */
+function readIconAsDataUri(filePath: string): string | undefined {
+	try {
+		return `data:image/png;base64,${fs.readFileSync(filePath).toString("base64")}`;
+	} catch (error) {
+		streamDeck.logger.error(`Failed to read cached icon file ${filePath}`, error);
 		return undefined;
 	}
 }
@@ -519,8 +631,4 @@ export type VolumeSettings = {
 	stepSize?: number;
 	isMuted?: boolean;
 	previousVolume?: number;
-	/** What to show in the dial's title area. Defaults to "custom" (the original fixed "Multi Volume" title). */
-	titleMode?: "custom" | "app" | "both";
-	/** User-supplied title text, used when `titleMode` is "custom" or "both". Falls back to "Multi Volume". */
-	customTitle?: string;
 };

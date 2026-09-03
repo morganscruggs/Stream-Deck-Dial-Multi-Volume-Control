@@ -1,6 +1,6 @@
 {
 	"Name": "Multi Volume Controller",
-	"Version": "0.1.0.0",
+	"Version": "1.0.0.0",
 	"Author": "Morgan Scruggs",
 	"Actions": [
 		{
@@ -12,7 +12,6 @@
 			"Controllers": [
 				"Encoder"
 			],
-
 			"Encoder": {
 				"layout": "$B1",
 				"TriggerDescription": {
@@ -44,8 +43,7 @@
 		}
 	],
 	"Nodejs": {
-		"Version": "24",
-		"Debug": "enabled"
+		"Version": "24"
 	},
 	"UUID": "com.morgan-scruggs.volume-control-multi-dials"
 }

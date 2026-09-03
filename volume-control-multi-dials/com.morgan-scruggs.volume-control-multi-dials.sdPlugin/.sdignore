@@ -1,0 +1,5 @@
+# node-gyp build artifacts for node-audio-volume-mixer's native addon - only build/Release/addon.node
+# itself is loaded at runtime; the rest (debug symbols, intermediate object files, MSBuild logs) are
+# leftovers from compiling it and add several MB for nothing.
+**/*.pdb
+**/build/Release/obj/
