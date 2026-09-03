@@ -95,7 +95,8 @@
             color: #999;
             font-style: italic;
         }
-        .app-row-remove {
+        .app-row-remove,
+        .app-row-move-up {
             flex: none;
             width: 22px;
             height: 22px;
@@ -112,6 +113,18 @@
             color: #fff;
             border-color: #a55;
         }
+        .app-row-move-up:hover {
+            background: #3a3a3a;
+            color: #fff;
+        }
+        .app-row-move-up:disabled {
+            opacity: 0.3;
+            cursor: default;
+        }
+        .app-row-move-up:disabled:hover {
+            background: #2f2f2f;
+            color: #bbb;
+        }
     </style>
 </head>
 <body>
@@ -126,6 +139,18 @@
         <div class="applications-container" id="applications-container"></div>
     </sdpi-item>
     <p>Apps must play audio at least once to be detected. Previously-seen apps stay listed (marked "not running") even after they close.</p>
+
+    <sdpi-item label="Title Layout:">
+        <sdpi-select setting="titleMode" default="custom">
+            <option value="custom">Custom Title</option>
+            <option value="app">Top Application Name</option>
+            <option value="both">Both (custom left, app right)</option>
+        </sdpi-select>
+    </sdpi-item>
+
+    <sdpi-item label="Custom Title" id="custom-title-item">
+        <sdpi-textfield setting="customTitle" placeholder="Multi Volume" maxlength="30"></sdpi-textfield>
+    </sdpi-item>
 
     <sdpi-item label="Volume">
         <sdpi-range setting="volume" min="0" max="100" step="1" default="50" showlabels>
@@ -148,6 +173,17 @@
             const container = document.getElementById("applications-container");
 
             const initial = await client.getSettings();
+
+            // "Custom Title" only matters when the title mode actually shows it (not "Top Application
+            // Name" alone), so hide the field otherwise instead of leaving a control that does nothing.
+            const titleModeSelect = document.querySelector('sdpi-select[setting="titleMode"]');
+            const customTitleItem = document.getElementById("custom-title-item");
+            function updateTitleFieldVisibility(mode) {
+                customTitleItem.style.display = mode === "app" ? "none" : "";
+            }
+            updateTitleFieldVisibility(initial.settings.titleMode || "custom");
+            titleModeSelect.addEventListener("change", () => updateTitleFieldVisibility(titleModeSelect.value));
+
             let applications = Array.isArray(initial.settings.applications) ? initial.settings.applications.slice() : [];
             let items = [];
             let known = [];
@@ -235,6 +271,26 @@
                 });
                 row.appendChild(removeBtn);
 
+                // Priority order matters: when multiple configured apps are running at once, the dial
+                // controls whichever is highest in this list (see findRunningApp). This button lets the
+                // user move a row up that list without having to remove and re-add it in a new spot.
+                const moveUpBtn = document.createElement("button");
+                moveUpBtn.type = "button";
+                moveUpBtn.className = "app-row-move-up";
+                moveUpBtn.innerHTML = "&#9650;";
+                moveUpBtn.title = "Move up (higher priority)";
+                moveUpBtn.hidden = !value;
+                moveUpBtn.addEventListener("click", (ev) => {
+                    ev.stopPropagation();
+                    if (index === 0) return;
+                    const next = applications.slice();
+                    [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                    applications = next;
+                    persist();
+                    rebuildAll();
+                });
+                row.appendChild(moveUpBtn);
+
                 function renderButton() {
                     const match = findAppInfo(value);
                     labelEl.textContent = match ? match.label : (value || "Select an application");
@@ -244,6 +300,8 @@
                     } else {
                         iconEl.hidden = true;
                     }
+                    moveUpBtn.hidden = !value;
+                    moveUpBtn.disabled = index === 0;
                     removeBtn.hidden = !value;
                 }
 

@@ -347,6 +347,11 @@ function findRunningApp(applications: string[] | undefined): string | undefined 
  * and the progress bar is greyed out, since there's nothing currently controllable. Icon extraction
  * happens off to the side rather than being awaited here, so a not-yet-cached icon never delays the
  * rest of the feedback update - once it resolves, feedback is sent again with the icon included.
+ *
+ * The title area supports three modes (see `VolumeSettings.titleMode`): a fixed custom title (default,
+ * matching the original behaviour), the name of the top running app, or both joined on one line (the
+ * dial only ever uses the built-in "$B1" layout here, which has a single title field, so "both" can't
+ * be genuinely left/right-justified without a custom layout).
  */
 function updateFeedback(action: DialAction<VolumeSettings>, settings: VolumeSettings): Promise<void> {
 	const volume = settings.volume ?? 50;
@@ -355,8 +360,20 @@ function updateFeedback(action: DialAction<VolumeSettings>, settings: VolumeSett
 	const appKey = runningApp?.toLowerCase();
 	const iconPath = appKey ? iconCache.get(appKey)?.path : undefined;
 
+	const titleMode = settings.titleMode ?? "custom";
+	const customTitle = settings.customTitle || "Multi Volume";
+	const appName = runningApp ? prettifyAppName(runningApp) : "No app running";
+
+	let title: string;
+	if (titleMode === "both") {
+		title = `${settings.isMuted ? "Muted" : customTitle} – ${appName}`;
+	} else {
+		const base = titleMode === "app" ? appName : customTitle;
+		title = settings.isMuted ? "Muted" : base;
+	}
+
 	const feedback: FeedbackPayload = {
-		title: settings.isMuted ? "Muted" : "Multi Volume",
+		title,
 		value: settings.isMuted ? "Muted" : `${volume}%`,
 		indicator: runningApp ? barValue : { value: barValue, bar_fill_c: INACTIVE_BAR_COLOR },
 		icon: iconPath ?? DEFAULT_MIXER_ICON_PATH
@@ -502,4 +519,8 @@ export type VolumeSettings = {
 	stepSize?: number;
 	isMuted?: boolean;
 	previousVolume?: number;
+	/** What to show in the dial's title area. Defaults to "custom" (the original fixed "Multi Volume" title). */
+	titleMode?: "custom" | "app" | "both";
+	/** User-supplied title text, used when `titleMode` is "custom" or "both". Falls back to "Multi Volume". */
+	customTitle?: string;
 };

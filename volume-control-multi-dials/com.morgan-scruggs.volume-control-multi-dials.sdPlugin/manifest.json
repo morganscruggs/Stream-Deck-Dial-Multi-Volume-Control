@@ -1,5 +1,5 @@
 {
-	"Name": "Volume Control Multi Dials",
+	"Name": "Multi Volume Controller",
 	"Version": "0.1.0.0",
 	"Author": "Morgan Scruggs",
 	"Actions": [
@@ -28,7 +28,7 @@
 			]
 		}
 	],
-	"Category": "Volume Control Multi Dials",
+	"Category": "Multi Volume Controller",
 	"CategoryIcon": "imgs/plugin/category-icon",
 	"CodePath": "bin/plugin.js",
 	"Description": "Dials to control multiple applications at once",
