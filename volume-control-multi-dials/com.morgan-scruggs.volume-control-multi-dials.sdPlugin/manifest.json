@@ -16,8 +16,8 @@
 				"layout": "$B1",
 				"TriggerDescription": {
 					"Rotate": "Adjust Volume",
-					"Push": "Mute / Unmute",
-					"Touch": "Mute / Unmute"
+					"Push": "Mute/Unmute or Play/Pause (set in settings)",
+					"Touch": "Mute/Unmute or Play/Pause (set in settings)"
 				}
 			},
 			"States": [

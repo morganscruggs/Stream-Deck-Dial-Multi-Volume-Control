@@ -67,6 +67,20 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 	private lastSettings = new Map<string, VolumeSettings>();
 
 	/**
+	 * Visible dials, keyed by action id - needed (alongside {@link lastSettings}) so
+	 * {@link refreshPlayPauseDials} can push a fresh icon to every dial in "Play / Pause Media" mode
+	 * without waiting for that dial's own 2s poll tick.
+	 */
+	private visibleActions = new Map<string, DialAction<VolumeSettings>>();
+
+	/**
+	 * Shared timer that polls the system media session's playback status once for all dials at once
+	 * (see {@link refreshMediaPolling}), rather than each "Play / Pause Media" dial spawning its own
+	 * PowerShell process on its own schedule.
+	 */
+	private mediaPollInterval?: ReturnType<typeof setInterval>;
+
+	/**
 	 * Initialize the dial display when it appears, and start polling it while it's visible.
 	 */
 	override onWillAppear(ev: WillAppearEvent<VolumeSettings>): void | Promise<void> {
@@ -76,7 +90,9 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 
 		const action = ev.action;
 		this.lastSettings.set(action.id, ev.payload.settings);
+		this.visibleActions.set(action.id, action);
 		this.startPolling(action);
+		this.refreshMediaPolling();
 
 		return updateFeedback(action, ev.payload.settings);
 	}
@@ -87,7 +103,9 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 	override onWillDisappear(ev: WillDisappearEvent<VolumeSettings>): void {
 		this.stopPolling(ev.action.id);
 		this.lastSettings.delete(ev.action.id);
+		this.visibleActions.delete(ev.action.id);
 		nativeTitleByAction.delete(ev.action.id);
+		this.refreshMediaPolling();
 	}
 
 	/**
@@ -130,6 +148,49 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 	}
 
 	/**
+	 * Starts or stops the shared media-status poll based on whether any visible dial is currently
+	 * configured for "Play / Pause Media" - so this never spawns a PowerShell process in the background
+	 * for users who only ever use the default Mute/Unmute button. Called whenever visibility or settings
+	 * change, since either can turn playPause mode on or off for a dial.
+	 */
+	private refreshMediaPolling(): void {
+		const needsPolling = Array.from(this.lastSettings.values()).some((settings) => settings.pushButtonAction === "playPause");
+
+		if (needsPolling && !this.mediaPollInterval) {
+			this.mediaPollInterval = setInterval(() => this.pollMediaPlaybackStatus(), MEDIA_POLL_INTERVAL_MS);
+			this.pollMediaPlaybackStatus();
+		} else if (!needsPolling && this.mediaPollInterval) {
+			clearInterval(this.mediaPollInterval);
+			this.mediaPollInterval = undefined;
+		}
+	}
+
+	/**
+	 * Refreshes the cached playback status from Windows and pushes it out to every dial that displays
+	 * it. This is the only source of truth correction for state changed elsewhere (a physical media key,
+	 * pausing from within the app itself, etc.) - {@link handlePress} updates the cache optimistically
+	 * and immediately for this plugin's own button presses, without waiting for this poll.
+	 */
+	private async pollMediaPlaybackStatus(): Promise<void> {
+		cachedPlaybackStatus = await getMediaPlaybackStatus();
+		await this.refreshPlayPauseDials();
+	}
+
+	/**
+	 * Re-sends feedback for every visible dial currently in "Play / Pause Media" mode, so they pick up
+	 * the latest {@link cachedPlaybackStatus} (its paused-icon overlay) right away.
+	 */
+	private async refreshPlayPauseDials(): Promise<void> {
+		for (const [actionId, action] of this.visibleActions) {
+			const settings = this.lastSettings.get(actionId);
+			if (settings?.pushButtonAction !== "playPause") continue;
+			await updateFeedback(action, settings).catch((error) =>
+				streamDeck.logger.error("Failed to refresh play/pause dial feedback", error)
+			);
+		}
+	}
+
+	/**
 	 * Applies and refreshes the dial's on-device display whenever settings change from the property
 	 * inspector - e.g. dragging the Volume slider, or picking a different Application - so those take
 	 * effect immediately instead of waiting for the next rotate/press.
@@ -137,6 +198,7 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<VolumeSettings>): Promise<void> {
 		if (!ev.action.isDial()) return;
 		this.lastSettings.set(ev.action.id, ev.payload.settings);
+		this.refreshMediaPolling();
 		await updateFeedback(ev.action, ev.payload.settings);
 		this.applyToApps(ev.payload.settings);
 	}
@@ -166,16 +228,37 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 	}
 
 	/**
-	 * Toggle mute when the dial is pressed.
+	 * Handle the dial's push button - either toggles mute or sends the media play/pause key,
+	 * depending on the configured {@link VolumeSettings.pushButtonAction}.
 	 */
 	override async onDialUp(ev: DialUpEvent<VolumeSettings>): Promise<void> {
-		await this.toggleMute(ev);
+		await this.handlePress(ev);
 	}
 
 	/**
-	 * Toggle mute when the touch screen is tapped.
+	 * Handle a touch screen tap - shares the same configurable action as the push button.
 	 */
 	override async onTouchTap(ev: TouchTapEvent<VolumeSettings>): Promise<void> {
+		await this.handlePress(ev);
+	}
+
+	/**
+	 * Shared press logic for both the dial's push button and its touch screen: sends the media
+	 * play/pause key if the user has configured that, otherwise falls back to the default mute toggle.
+	 *
+	 * The cached playback status is flipped optimistically right here, rather than waiting for the next
+	 * poll tick (up to {@link MEDIA_POLL_INTERVAL_MS} away), so the paused-icon overlay reacts the instant
+	 * this plugin itself causes the change. A press when the status isn't known yet is assumed to be
+	 * pausing something that was playing, since that's the far more common reason to press this button.
+	 */
+	private async handlePress(ev: DialUpEvent<VolumeSettings> | TouchTapEvent<VolumeSettings>): Promise<void> {
+		if (ev.payload.settings.pushButtonAction === "playPause") {
+			await sendMediaPlayPause();
+			cachedPlaybackStatus = cachedPlaybackStatus === "paused" ? "playing" : "paused";
+			await this.refreshPlayPauseDials();
+			return;
+		}
+
 		await this.toggleMute(ev);
 	}
 
@@ -369,38 +452,78 @@ const DEFAULT_MIXER_ICON_ABS_PATH = path.join(PLUGIN_ROOT, DEFAULT_MIXER_ICON_PA
 const INACTIVE_BAR_COLOR = "#5a5a5a";
 
 /**
- * Color of the diagonal "muted" slash drawn over the icon.
+ * Color of the diagonal "muted" slash and the pause bars drawn over the icon.
  */
 const MUTE_SLASH_COLOR = "#ff3b30";
 
 /**
- * Builds a version of the given icon with a red diagonal line through it (top-left to bottom-right), for
- * the dial's icon while muted. Embeds the icon's own PNG bytes as a data URI inside an `<image>` and
- * draws the slash on top of it, rather than needing to pre-render and cache a separate "-muted" PNG
- * variant per app. Encoded as a base64 `data:image/svg+xml` URI - matching the SDK docs' own example
- * for an SVG Pixmap value - rather than a bare `<svg>` string, and declares `xlink:href` alongside the
- * plain `href` on `<image>` for compatibility with SVG 1.1-only renderers.
+ * Outline color for both overlays, keeping them legible against icons that are themselves red or
+ * otherwise low-contrast against the plain {@link MUTE_SLASH_COLOR}.
  */
-function buildMutedIcon(iconAbsPath: string): string | undefined {
+const OVERLAY_OUTLINE_COLOR = "#000000";
+
+/**
+ * SVG markup for the two red pause bars drawn over the icon while playback is paused (see
+ * {@link buildPausedIcon}) - no background badge, just the bars themselves, each a fully-rounded
+ * capsule (`rx` set to half its own width) for a softer look than a sharp rectangle, with a thin black
+ * outline (`stroke`) for contrast. Shares {@link MUTE_SLASH_COLOR} so both overlays use the same red.
+ */
+const PAUSE_OVERLAY_SVG = `
+<rect x="29" y="18" width="14" height="64" rx="7" fill="${MUTE_SLASH_COLOR}" stroke="${OVERLAY_OUTLINE_COLOR}" stroke-width="2" />
+<rect x="57" y="18" width="14" height="64" rx="7" fill="${MUTE_SLASH_COLOR}" stroke="${OVERLAY_OUTLINE_COLOR}" stroke-width="2" />
+`;
+
+/**
+ * Builds a version of the given icon with an overlay drawn on top of it. Embeds the icon's own PNG
+ * bytes as a data URI inside an `<image>` and draws the overlay markup over it, rather than needing to
+ * pre-render and cache a separate variant per app per overlay. Encoded as a base64 `data:image/svg+xml`
+ * URI - matching the SDK docs' own example for an SVG Pixmap value - rather than a bare `<svg>` string,
+ * and declares `xlink:href` alongside the plain `href` on `<image>` for compatibility with SVG
+ * 1.1-only renderers.
+ */
+function buildIconWithOverlay(iconAbsPath: string, overlaySvg: string): string | undefined {
 	const dataUri = readIconAsDataUri(iconAbsPath);
 	if (!dataUri) return undefined;
 
 	const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 100 100" width="100" height="100">
 <image xlink:href="${dataUri}" href="${dataUri}" x="0" y="0" width="100" height="100" preserveAspectRatio="xMidYMid meet" />
-<line x1="6" y1="6" x2="94" y2="94" stroke="${MUTE_SLASH_COLOR}" stroke-width="9" stroke-linecap="round" />
+${overlaySvg}
 </svg>`;
 
 	return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
 }
 
 /**
- * Resolves the icon to actually hand to `setFeedback`: the plain file path when unmuted, or the
- * slashed-icon SVG (see {@link buildMutedIcon}) when muted - falling back to the plain path if reading
- * the source file for the overlay fails for some reason.
+ * Builds a version of the given icon with a red diagonal line through it (top-left to bottom-right), for
+ * the dial's icon while muted. A line has no fill to apply an outline to, so the black outline is
+ * faked by drawing a slightly wider black line first and the red line on top of it.
  */
-function resolveIconFeedbackValue(iconAbsPath: string, isMuted: boolean): string {
-	if (!isMuted) return iconAbsPath;
-	return buildMutedIcon(iconAbsPath) ?? iconAbsPath;
+function buildMutedIcon(iconAbsPath: string): string | undefined {
+	return buildIconWithOverlay(
+		iconAbsPath,
+		`<line x1="6" y1="6" x2="94" y2="94" stroke="${OVERLAY_OUTLINE_COLOR}" stroke-width="13" stroke-linecap="round" />
+<line x1="6" y1="6" x2="94" y2="94" stroke="${MUTE_SLASH_COLOR}" stroke-width="9" stroke-linecap="round" />`
+	);
+}
+
+/**
+ * Builds a version of the given icon with a paused badge over it, for a "Play / Pause Media" dial while
+ * {@link cachedPlaybackStatus} is "paused".
+ */
+function buildPausedIcon(iconAbsPath: string): string | undefined {
+	return buildIconWithOverlay(iconAbsPath, PAUSE_OVERLAY_SVG);
+}
+
+/**
+ * Resolves the icon to actually hand to `setFeedback`: the plain file path normally, or an overlaid
+ * version - the red mute slash taking priority over the paused badge, since a dial only ever has one
+ * reason to show an overlay in practice (mute-mode dials never set `isPaused`, and vice versa) - falling
+ * back to the plain path if reading the source file for the overlay fails for some reason.
+ */
+function resolveIconFeedbackValue(iconAbsPath: string, isMuted: boolean, isPaused: boolean): string {
+	if (isMuted) return buildMutedIcon(iconAbsPath) ?? iconAbsPath;
+	if (isPaused) return buildPausedIcon(iconAbsPath) ?? iconAbsPath;
+	return iconAbsPath;
 }
 
 /**
@@ -470,11 +593,15 @@ function updateFeedback(action: DialAction<VolumeSettings>, settings: VolumeSett
 	const isDimmed = settings.isMuted || !runningApp;
 	const dimColor = isDimmed ? INACTIVE_BAR_COLOR : "white";
 
+	// Only a dial actually in "Play / Pause Media" mode shows the paused badge - the cached status is
+	// shared globally, but a Mute/Unmute dial has nothing to do with media playback.
+	const isPaused = settings.pushButtonAction === "playPause" && cachedPlaybackStatus === "paused";
+
 	const feedback: FeedbackPayload = {
 		title,
 		value: { value: `${volume}%`, color: dimColor },
 		indicator: { value: barValue, bar_fill_c: dimColor },
-		icon: resolveIconFeedbackValue(iconPath ?? DEFAULT_MIXER_ICON_ABS_PATH, settings.isMuted ?? false)
+		icon: resolveIconFeedbackValue(iconPath ?? DEFAULT_MIXER_ICON_ABS_PATH, settings.isMuted ?? false, isPaused)
 	};
 
 	if (runningApp && appKey && !iconPath && !iconResolutionInFlight.has(appKey)) {
@@ -491,7 +618,7 @@ function updateFeedback(action: DialAction<VolumeSettings>, settings: VolumeSett
 				// higher-priority one) while extraction was in flight - re-check live rather than
 				// blindly applying a stale snapshot, which would clobber a more recent, correct update.
 				if (findRunningApp(settings.applications) !== runningApp) return;
-				return action.setFeedback({ ...feedback, icon: resolveIconFeedbackValue(savedPath, settings.isMuted ?? false) });
+				return action.setFeedback({ ...feedback, icon: resolveIconFeedbackValue(savedPath, settings.isMuted ?? false, isPaused) });
 			})
 			.catch((error) => streamDeck.logger.error(`Failed to load icon for ${runningApp}`, error))
 			.finally(() => iconResolutionInFlight.delete(appKey));
@@ -618,6 +745,109 @@ async function extractIconForPid(pid: number): Promise<string | undefined> {
 }
 
 /**
+ * P/Invoke helper for simulating the hardware Media Play/Pause key. Windows routes that key globally
+ * to whatever app currently owns the System Media Transport Controls session (Spotify, a browser tab
+ * playing video, etc.) - there's no per-app "pause" API, so this deliberately mirrors a physical media
+ * keyboard key rather than targeting this action's own configured application list.
+ */
+const MEDIA_KEY_HELPER_TYPE = `
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class MediaKey {
+    [DllImport("user32.dll")]
+    public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+}
+'@
+`.trim();
+
+const VK_MEDIA_PLAY_PAUSE = 0xb3;
+const KEYEVENTF_KEYUP = 0x2;
+
+/**
+ * Simulates a press of the Media Play/Pause key, toggling playback in whichever app currently owns
+ * the system's media session - the same effect as a physical keyboard's play/pause media key.
+ */
+async function sendMediaPlayPause(): Promise<void> {
+	const script = [
+		MEDIA_KEY_HELPER_TYPE,
+		`[MediaKey]::keybd_event(${VK_MEDIA_PLAY_PAUSE}, 0, 0, [UIntPtr]::Zero)`,
+		`[MediaKey]::keybd_event(${VK_MEDIA_PLAY_PAUSE}, 0, ${KEYEVENTF_KEYUP}, [UIntPtr]::Zero)`
+	].join("\n");
+
+	try {
+		await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { timeout: 5000 });
+	} catch (error) {
+		streamDeck.logger.error("Failed to send media play/pause key", error);
+	}
+}
+
+/**
+ * How often the shared media-status poll (see {@link VolumeControl.refreshMediaPolling}) re-checks
+ * Windows' System Media Transport Controls for the current playback state. Each check spawns a
+ * short-lived PowerShell process, so this is deliberately infrequent - 5s keeps that overhead
+ * negligible (a few hundred ms of PowerShell startup roughly every 5s, only while at least one dial is
+ * in "Play / Pause Media" mode) while still catching state changed elsewhere (a physical media key,
+ * pausing from inside the app itself) within a few seconds. This plugin's own button presses don't wait
+ * on this poll at all - see the optimistic update in {@link VolumeControl.handlePress}.
+ */
+const MEDIA_POLL_INTERVAL_MS = 5000;
+
+/**
+ * Last-known playback status of whatever app currently owns the system media session, shared across
+ * every dial in "Play / Pause Media" mode (see {@link VolumeControl.refreshMediaPolling}). `undefined`
+ * means unknown or no active media session - deliberately distinct from "playing", so a dial doesn't
+ * show a paused overlay just because nothing is playing at all.
+ */
+type MediaPlaybackStatus = "playing" | "paused" | undefined;
+let cachedPlaybackStatus: MediaPlaybackStatus;
+
+/**
+ * PowerShell for reading the current System Media Transport Controls session's playback status. This is
+ * the same WinRT API (`Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager`) that
+ * backs the Windows lock-screen media controls - there's no simpler/native Node API for it. WinRT's
+ * async methods return `IAsyncOperation`, which .NET/PowerShell can't `await` directly; the `Await`
+ * helper function is the standard reflection-based trick (used throughout the PowerShell community) for
+ * bridging that to a blocking `Task.Wait()` inside a synchronous script.
+ */
+const MEDIA_STATUS_SCRIPT = [
+	"Add-Type -AssemblyName System.Runtime.WindowsRuntime",
+	"[Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime] | Out-Null",
+	"Function Await($WinRtTask, $ResultType) {",
+	"    $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]",
+	"    $asTask = $asTaskGeneric.MakeGenericMethod($ResultType)",
+	"    $netTask = $asTask.Invoke($null, @($WinRtTask))",
+	"    $netTask.Wait(-1) | Out-Null",
+	"    $netTask.Result",
+	"}",
+	"$managerType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]",
+	"$manager = Await ($managerType::RequestAsync()) ($managerType)",
+	"$session = $manager.GetCurrentSession()",
+	'if ($session) { $session.GetPlaybackInfo().PlaybackStatus.ToString() } else { "None" }'
+].join("\n");
+
+/**
+ * Queries Windows for the playback status of whatever app currently owns the system media session.
+ * Returns `undefined` for anything other than a clean "Playing"/"Paused" answer (no active session,
+ * "Stopped"/"Closed"/etc, or the query failing outright) - those all mean "don't claim to know", not
+ * "assume playing".
+ */
+async function getMediaPlaybackStatus(): Promise<MediaPlaybackStatus> {
+	try {
+		const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", MEDIA_STATUS_SCRIPT], {
+			timeout: 5000
+		});
+		const status = stdout.trim();
+		if (status === "Playing") return "playing";
+		if (status === "Paused") return "paused";
+		return undefined;
+	} catch (error) {
+		streamDeck.logger.error("Failed to read media playback status", error);
+		return undefined;
+	}
+}
+
+/**
  * Turns an executable name like "chrome.exe" into a friendlier label like "Chrome" for the app picker.
  */
 function prettifyAppName(exeName: string): string {
@@ -631,4 +861,6 @@ export type VolumeSettings = {
 	stepSize?: number;
 	isMuted?: boolean;
 	previousVolume?: number;
+	/** What the dial's push button (and touch tap) does when pressed. Defaults to "mute" if unset. */
+	pushButtonAction?: "mute" | "playPause";
 };
