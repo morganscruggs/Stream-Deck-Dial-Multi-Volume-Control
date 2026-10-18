@@ -13,7 +13,8 @@ import streamDeck, {
 	TouchTapEvent
 } from "@elgato/streamdeck";
 import { NodeAudioVolumeMixer } from "node-audio-volume-mixer";
-import { execFile } from "node:child_process";
+import { ChildProcessWithoutNullStreams, execFile, spawn } from "node:child_process";
+import { createInterface } from "node:readline";
 import { promisify } from "node:util";
 import fs from "node:fs";
 import path from "node:path";
@@ -79,6 +80,12 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 	 * PowerShell process on its own schedule.
 	 */
 	private mediaPollInterval?: ReturnType<typeof setInterval>;
+
+	/** Whether a media-status poll is still waiting on its answer (see {@link pollMediaPlaybackStatus}). */
+	private mediaPollInFlight = false;
+
+	/** When this plugin last sent a play/pause key press, for {@link MEDIA_PRESS_GRACE_MS}. */
+	private lastMediaPressAt = 0;
 
 	/**
 	 * Initialize the dial display when it appears, and start polling it while it's visible.
@@ -162,6 +169,7 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 		} else if (!needsPolling && this.mediaPollInterval) {
 			clearInterval(this.mediaPollInterval);
 			this.mediaPollInterval = undefined;
+			stopMediaShell();
 		}
 	}
 
@@ -170,10 +178,27 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 	 * it. This is the only source of truth correction for state changed elsewhere (a physical media key,
 	 * pausing from within the app itself, etc.) - {@link handlePress} updates the cache optimistically
 	 * and immediately for this plugin's own button presses, without waiting for this poll.
+	 *
+	 * Dials are only redrawn when the status actually changes, so the frequent poll costs next to nothing
+	 * the rest of the time. A poll is skipped while the previous one is still waiting on an answer, and a
+	 * result is discarded if it was requested within {@link MEDIA_PRESS_GRACE_MS} of a press - otherwise
+	 * a poll racing the press (or an app slow to report its new state) would briefly flip the overlay back.
 	 */
 	private async pollMediaPlaybackStatus(): Promise<void> {
-		cachedPlaybackStatus = await getMediaPlaybackStatus();
-		await this.refreshPlayPauseDials();
+		if (this.mediaPollInFlight) return;
+		this.mediaPollInFlight = true;
+
+		try {
+			const requestedAt = Date.now();
+			const status = await getMediaPlaybackStatus();
+			if (requestedAt < this.lastMediaPressAt + MEDIA_PRESS_GRACE_MS) return;
+			if (status === cachedPlaybackStatus) return;
+
+			cachedPlaybackStatus = status;
+			await this.refreshPlayPauseDials();
+		} finally {
+			this.mediaPollInFlight = false;
+		}
 	}
 
 	/**
@@ -253,7 +278,8 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 	 */
 	private async handlePress(ev: DialUpEvent<VolumeSettings> | TouchTapEvent<VolumeSettings>): Promise<void> {
 		if (ev.payload.settings.pushButtonAction === "playPause") {
-			await sendMediaPlayPause();
+			sendMediaPlayPause();
+			this.lastMediaPressAt = Date.now();
 			cachedPlaybackStatus = cachedPlaybackStatus === "paused" ? "playing" : "paused";
 			await this.refreshPlayPauseDials();
 			return;
@@ -469,8 +495,8 @@ const OVERLAY_OUTLINE_COLOR = "#000000";
  * outline (`stroke`) for contrast. Shares {@link MUTE_SLASH_COLOR} so both overlays use the same red.
  */
 const PAUSE_OVERLAY_SVG = `
-<rect x="29" y="18" width="14" height="64" rx="7" fill="${MUTE_SLASH_COLOR}" stroke="${OVERLAY_OUTLINE_COLOR}" stroke-width="2" />
-<rect x="57" y="18" width="14" height="64" rx="7" fill="${MUTE_SLASH_COLOR}" stroke="${OVERLAY_OUTLINE_COLOR}" stroke-width="2" />
+<rect x="29" y="18" width="14" height="64" rx="7" fill="${MUTE_SLASH_COLOR}" stroke="${OVERLAY_OUTLINE_COLOR}" stroke-width="4" />
+<rect x="57" y="18" width="14" height="64" rx="7" fill="${MUTE_SLASH_COLOR}" stroke="${OVERLAY_OUTLINE_COLOR}" stroke-width="4" />
 `;
 
 /**
@@ -501,7 +527,7 @@ ${overlaySvg}
 function buildMutedIcon(iconAbsPath: string): string | undefined {
 	return buildIconWithOverlay(
 		iconAbsPath,
-		`<line x1="6" y1="6" x2="94" y2="94" stroke="${OVERLAY_OUTLINE_COLOR}" stroke-width="13" stroke-linecap="round" />
+		`<line x1="6" y1="6" x2="94" y2="94" stroke="${OVERLAY_OUTLINE_COLOR}" stroke-width="17" stroke-linecap="round" />
 <line x1="6" y1="6" x2="94" y2="94" stroke="${MUTE_SLASH_COLOR}" stroke-width="9" stroke-linecap="round" />`
 	);
 }
@@ -749,34 +775,93 @@ async function extractIconForPid(pid: number): Promise<string | undefined> {
  * to whatever app currently owns the System Media Transport Controls session (Spotify, a browser tab
  * playing video, etc.) - there's no per-app "pause" API, so this deliberately mirrors a physical media
  * keyboard key rather than targeting this action's own configured application list.
+ *
+ * Kept on a single line since it's fed to a `-Command -` shell's stdin line by line (see
+ * {@link getMediaShell}), where a multi-line here-string wouldn't be parsed as one statement.
  */
-const MEDIA_KEY_HELPER_TYPE = `
-Add-Type -TypeDefinition @'
-using System;
-using System.Runtime.InteropServices;
-public static class MediaKey {
-    [DllImport("user32.dll")]
-    public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
-}
-'@
-`.trim();
+const MEDIA_KEY_HELPER_TYPE =
+	"Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class MediaKey { " +
+	'[DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo); }\'';
 
 const VK_MEDIA_PLAY_PAUSE = 0xb3;
 const KEYEVENTF_KEYUP = 0x2;
+
+const MEDIA_KEY_PRESS_COMMAND =
+	`[MediaKey]::keybd_event(${VK_MEDIA_PLAY_PAUSE}, 0, 0, [UIntPtr]::Zero); ` +
+	`[MediaKey]::keybd_event(${VK_MEDIA_PLAY_PAUSE}, 0, ${KEYEVENTF_KEYUP}, [UIntPtr]::Zero)`;
+
+/**
+ * PowerShell for reading the current System Media Transport Controls session's playback status. This is
+ * the same WinRT API (`Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager`) that
+ * backs the Windows lock-screen media controls - there's no simpler/native Node API for it. WinRT's
+ * async methods return `IAsyncOperation`, which .NET/PowerShell can't `await` directly; `$asTask` is the
+ * standard reflection-based trick (used throughout the PowerShell community) for bridging that to a
+ * blocking `Task.Wait()` inside a synchronous script.
+ *
+ * Run once when {@link getMediaShell} starts, defining a `Get-MediaStatus` function that each poll then
+ * calls. The session manager is cached after its first request, and that request's wait is capped at 3s
+ * so a stuck WinRT call can't block the shell - and any key presses queued behind it - indefinitely.
+ * Joined onto one line for the same reason as {@link MEDIA_KEY_HELPER_TYPE}.
+ */
+const MEDIA_STATUS_HELPER = [
+	"Add-Type -AssemblyName System.Runtime.WindowsRuntime",
+	"$mgrType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime]",
+	"$asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0].MakeGenericMethod($mgrType)",
+	"function Get-MediaStatus { try { if (-not $script:mgr) { $t = $asTask.Invoke($null, @($mgrType::RequestAsync())); if (-not $t.Wait(3000)) { return 'None' }; $script:mgr = $t.Result }; $s = $script:mgr.GetCurrentSession(); if ($s) { $s.GetPlaybackInfo().PlaybackStatus.ToString() } else { 'None' } } catch { 'None' } }"
+].join("; ");
+
+/**
+ * Long-lived PowerShell process that handles both media jobs: sending play/pause key presses and
+ * answering playback status polls. Spawning a fresh `powershell.exe` (and compiling
+ * {@link MEDIA_KEY_HELPER_TYPE} via `Add-Type`) costs 1-2s, which made every press feel laggy and every
+ * poll needlessly expensive - so that's paid once up front here, and each press or poll is just one
+ * line written to this shell's stdin. Started while any dial is in "Play / Pause Media" mode (see
+ * {@link VolumeControl.refreshMediaPolling}), and exits on its own if the plugin dies, since its stdin
+ * closes.
+ */
+let mediaShell: ChildProcessWithoutNullStreams | undefined;
+
+/**
+ * Status polls waiting on an answer from {@link mediaShell}, keyed by request id. Each request echoes
+ * its id back (`STATUS:<id>:<status>`), so an answer that arrives after its request already timed out
+ * can't be mistaken for a later request's.
+ */
+const pendingStatusRequests = new Map<number, (status: string) => void>();
+let nextStatusRequestId = 0;
+
+function getMediaShell(): ChildProcessWithoutNullStreams {
+	if (mediaShell && mediaShell.exitCode === null) return mediaShell;
+
+	const shell = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-NoLogo", "-Command", "-"], { windowsHide: true });
+	createInterface({ input: shell.stdout }).on("line", (line) => {
+		const match = /^STATUS:(\d+):(.*)$/.exec(line.trim());
+		if (match) pendingStatusRequests.get(Number(match[1]))?.(match[2]);
+	});
+	shell.stderr.on("data", (data) => streamDeck.logger.error(`Media shell: ${String(data).trim()}`));
+	shell.stdin.on("error", (error) => streamDeck.logger.error("Media shell stdin error", error));
+	shell.on("error", (error) => streamDeck.logger.error("Media shell failed", error));
+	shell.on("exit", () => {
+		if (mediaShell === shell) mediaShell = undefined;
+		for (const finish of Array.from(pendingStatusRequests.values())) finish("None");
+	});
+	shell.stdin.write(`${MEDIA_KEY_HELPER_TYPE}\n${MEDIA_STATUS_HELPER}\n`);
+
+	mediaShell = shell;
+	return shell;
+}
+
+function stopMediaShell(): void {
+	mediaShell?.stdin.end();
+	mediaShell = undefined;
+}
 
 /**
  * Simulates a press of the Media Play/Pause key, toggling playback in whichever app currently owns
  * the system's media session - the same effect as a physical keyboard's play/pause media key.
  */
-async function sendMediaPlayPause(): Promise<void> {
-	const script = [
-		MEDIA_KEY_HELPER_TYPE,
-		`[MediaKey]::keybd_event(${VK_MEDIA_PLAY_PAUSE}, 0, 0, [UIntPtr]::Zero)`,
-		`[MediaKey]::keybd_event(${VK_MEDIA_PLAY_PAUSE}, 0, ${KEYEVENTF_KEYUP}, [UIntPtr]::Zero)`
-	].join("\n");
-
+function sendMediaPlayPause(): void {
 	try {
-		await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { timeout: 5000 });
+		getMediaShell().stdin.write(`${MEDIA_KEY_PRESS_COMMAND}\n`);
 	} catch (error) {
 		streamDeck.logger.error("Failed to send media play/pause key", error);
 	}
@@ -784,14 +869,26 @@ async function sendMediaPlayPause(): Promise<void> {
 
 /**
  * How often the shared media-status poll (see {@link VolumeControl.refreshMediaPolling}) re-checks
- * Windows' System Media Transport Controls for the current playback state. Each check spawns a
- * short-lived PowerShell process, so this is deliberately infrequent - 5s keeps that overhead
- * negligible (a few hundred ms of PowerShell startup roughly every 5s, only while at least one dial is
- * in "Play / Pause Media" mode) while still catching state changed elsewhere (a physical media key,
- * pausing from inside the app itself) within a few seconds. This plugin's own button presses don't wait
- * on this poll at all - see the optimistic update in {@link VolumeControl.handlePress}.
+ * Windows' System Media Transport Controls for the current playback state. Each check is just a quick
+ * call into the already-running {@link mediaShell}, and dials are only redrawn when the answer changes,
+ * so this can be frequent - a change made elsewhere (a physical media key, pausing from inside the app
+ * itself) shows up on the dial within about a second. This plugin's own button presses don't wait on
+ * this poll at all - see the optimistic update in {@link VolumeControl.handlePress}.
  */
-const MEDIA_POLL_INTERVAL_MS = 5000;
+const MEDIA_POLL_INTERVAL_MS = 1000;
+
+/**
+ * How long after this plugin's own play/pause press poll results are ignored, giving the media app time
+ * to report its new state before a poll is trusted over the optimistic update in
+ * {@link VolumeControl.handlePress}.
+ */
+const MEDIA_PRESS_GRACE_MS = 1500;
+
+/**
+ * How long a status poll waits for {@link mediaShell} to answer. Generous, since the very first poll
+ * after the shell starts also waits behind its PowerShell startup and helper setup.
+ */
+const MEDIA_STATUS_TIMEOUT_MS = 10000;
 
 /**
  * Last-known playback status of whatever app currently owns the system media session, shared across
@@ -803,48 +900,29 @@ type MediaPlaybackStatus = "playing" | "paused" | undefined;
 let cachedPlaybackStatus: MediaPlaybackStatus;
 
 /**
- * PowerShell for reading the current System Media Transport Controls session's playback status. This is
- * the same WinRT API (`Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager`) that
- * backs the Windows lock-screen media controls - there's no simpler/native Node API for it. WinRT's
- * async methods return `IAsyncOperation`, which .NET/PowerShell can't `await` directly; the `Await`
- * helper function is the standard reflection-based trick (used throughout the PowerShell community) for
- * bridging that to a blocking `Task.Wait()` inside a synchronous script.
- */
-const MEDIA_STATUS_SCRIPT = [
-	"Add-Type -AssemblyName System.Runtime.WindowsRuntime",
-	"[Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime] | Out-Null",
-	"Function Await($WinRtTask, $ResultType) {",
-	"    $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]",
-	"    $asTask = $asTaskGeneric.MakeGenericMethod($ResultType)",
-	"    $netTask = $asTask.Invoke($null, @($WinRtTask))",
-	"    $netTask.Wait(-1) | Out-Null",
-	"    $netTask.Result",
-	"}",
-	"$managerType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]",
-	"$manager = Await ($managerType::RequestAsync()) ($managerType)",
-	"$session = $manager.GetCurrentSession()",
-	'if ($session) { $session.GetPlaybackInfo().PlaybackStatus.ToString() } else { "None" }'
-].join("\n");
-
-/**
  * Queries Windows for the playback status of whatever app currently owns the system media session.
  * Returns `undefined` for anything other than a clean "Playing"/"Paused" answer (no active session,
- * "Stopped"/"Closed"/etc, or the query failing outright) - those all mean "don't claim to know", not
- * "assume playing".
+ * "Stopped"/"Closed"/etc, or the query failing or timing out) - those all mean "don't claim to know",
+ * not "assume playing".
  */
-async function getMediaPlaybackStatus(): Promise<MediaPlaybackStatus> {
-	try {
-		const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", MEDIA_STATUS_SCRIPT], {
-			timeout: 5000
-		});
-		const status = stdout.trim();
-		if (status === "Playing") return "playing";
-		if (status === "Paused") return "paused";
-		return undefined;
-	} catch (error) {
-		streamDeck.logger.error("Failed to read media playback status", error);
-		return undefined;
-	}
+function getMediaPlaybackStatus(): Promise<MediaPlaybackStatus> {
+	return new Promise((resolve) => {
+		const id = nextStatusRequestId++;
+		const timer = setTimeout(() => finish("None"), MEDIA_STATUS_TIMEOUT_MS);
+		function finish(status: string): void {
+			clearTimeout(timer);
+			pendingStatusRequests.delete(id);
+			resolve(status === "Playing" ? "playing" : status === "Paused" ? "paused" : undefined);
+		}
+		pendingStatusRequests.set(id, finish);
+
+		try {
+			getMediaShell().stdin.write(`[Console]::Out.WriteLine('STATUS:${id}:' + (Get-MediaStatus))\n`);
+		} catch (error) {
+			streamDeck.logger.error("Failed to read media playback status", error);
+			finish("None");
+		}
+	});
 }
 
 /**
