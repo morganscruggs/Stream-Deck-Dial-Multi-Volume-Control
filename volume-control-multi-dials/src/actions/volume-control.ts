@@ -264,20 +264,13 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 		const { settings } = ev.payload;
 
 		// If currently muted, un-mute when rotating and restore the volume it had before muting.
-		if (settings.isMuted) {
-			settings.isMuted = false;
-			settings.volume = settings.previousVolume ?? 50;
-			settings.previousVolume = undefined;
-		}
+		if (settings.isMuted) unmute(settings);
 
 		const stepSize = settings.stepSize ?? 5;
 		const currentVolume = settings.volume ?? 50;
 		settings.volume = Math.max(0, Math.min(100, currentVolume + ev.payload.ticks * stepSize));
 
-		// The audible change goes first, so the dial doesn't feel like it lags behind saving/redrawing.
-		this.applyToApps(settings);
-		this.lastSettings.set(ev.action.id, settings);
-		await Promise.all([updateFeedback(ev.action, settings), ev.action.setSettings(settings)]);
+		await this.commitSettings(ev.action, settings);
 	}
 
 	/**
@@ -324,17 +317,24 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 		const { settings } = ev.payload;
 
 		if (settings.isMuted) {
-			settings.isMuted = false;
-			settings.volume = settings.previousVolume ?? 50;
-			settings.previousVolume = undefined;
+			unmute(settings);
 		} else {
 			settings.isMuted = true;
 			settings.previousVolume = settings.volume ?? 50;
 		}
 
+		await this.commitSettings(ev.action, settings);
+	}
+
+	/**
+	 * Applies settings changed by the dial itself (rotate/mute) to the configured apps, then redraws
+	 * the dial and saves them. The audible change goes first, so the dial doesn't feel like it lags
+	 * behind saving/redrawing.
+	 */
+	private async commitSettings(action: DialAction<VolumeSettings>, settings: VolumeSettings): Promise<void> {
 		this.applyToApps(settings);
-		this.lastSettings.set(ev.action.id, settings);
-		await Promise.all([updateFeedback(ev.action, settings), ev.action.setSettings(settings)]);
+		this.lastSettings.set(action.id, settings);
+		await Promise.all([updateFeedback(action, settings), action.setSettings(settings)]);
 	}
 
 	/**
@@ -437,6 +437,15 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 			}
 		});
 	}
+}
+
+/**
+ * Clears a dial's muted state, restoring the volume it had before it was muted.
+ */
+function unmute(settings: VolumeSettings): void {
+	settings.isMuted = false;
+	settings.volume = settings.previousVolume ?? 50;
+	settings.previousVolume = undefined;
 }
 
 /**
