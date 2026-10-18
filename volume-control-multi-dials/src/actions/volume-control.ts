@@ -1,8 +1,8 @@
 import streamDeck, {
 	action,
 	DialAction,
+	DialDownEvent,
 	DialRotateEvent,
-	DialUpEvent,
 	DidReceiveSettingsEvent,
 	FeedbackPayload,
 	SendToPluginEvent,
@@ -29,9 +29,29 @@ const AUDIO_APPS_DATASOURCE = "getAudioApps";
  * with pid 0 (the reserved System Idle Process id, which no process can ever resolve a name for -
  * unrelated to any app, harmless, and not worth surfacing anywhere).
  */
-function getNamedAudioSessions(): { pid: number; name: string }[] {
+function getNamedAudioSessions(): AudioSession[] {
 	return NodeAudioVolumeMixer.getAudioSessionProcesses().filter((session) => session.pid !== 0 && session.name);
 }
+
+type AudioSession = { pid: number; name: string };
+
+/**
+ * {@link getNamedAudioSessions}, but returning `undefined` instead of throwing if Windows' audio
+ * session enumeration fails - for callers that just treat that as "nothing running right now".
+ */
+function tryGetNamedAudioSessions(): AudioSession[] | undefined {
+	try {
+		return getNamedAudioSessions();
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * How often every visible dial is re-checked (see {@link VolumeControl.refreshAllDials}), so a
+ * launched/closed app is picked up (icon, grey/active bar) without the user touching the dial.
+ */
+const DIAL_REFRESH_INTERVAL_MS = 2000;
 
 // This file compiles to <sdPlugin>/bin/plugin.js, so the plugin's own root is one directory up.
 const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -53,10 +73,10 @@ const DYNAMIC_ICON_DIR = path.join(process.env.APPDATA ?? PLUGIN_ROOT, "com.morg
 @action({ UUID: "com.morgan-scruggs.volume-control-multi-dials.volume" })
 export class VolumeControl extends SingletonAction<VolumeSettings> {
 	/**
-	 * Tracks each visible dial's periodic refresh, keyed by action id, so a launched/closed app is
-	 * picked up (icon, grey/active bar) without waiting for the user to touch the dial themselves.
+	 * Shared timer that refreshes every visible dial at once (see {@link refreshAllDials}), rather than
+	 * each dial running its own - so Windows' audio sessions are enumerated once per tick, not per dial.
 	 */
-	private pollIntervals = new Map<string, ReturnType<typeof setInterval>>();
+	private dialRefreshInterval?: ReturnType<typeof setInterval>;
 
 	/**
 	 * Last-known settings per visible dial (action id), used by the poll below instead of calling
@@ -98,7 +118,9 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 		const action = ev.action;
 		this.lastSettings.set(action.id, ev.payload.settings);
 		this.visibleActions.set(action.id, action);
-		this.startPolling(action);
+		// A dial that's (re)appearing has whatever Stream Deck shows by default, not our last feedback.
+		lastFeedbackKeyByAction.delete(action.id);
+		this.refreshDialPolling();
 		this.refreshMediaPolling();
 
 		return updateFeedback(action, ev.payload.settings);
@@ -108,10 +130,11 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 	 * Stops polling once the dial is no longer visible (navigated away from, unplugged, etc).
 	 */
 	override onWillDisappear(ev: WillDisappearEvent<VolumeSettings>): void {
-		this.stopPolling(ev.action.id);
 		this.lastSettings.delete(ev.action.id);
 		this.visibleActions.delete(ev.action.id);
 		nativeTitleByAction.delete(ev.action.id);
+		lastFeedbackKeyByAction.delete(ev.action.id);
+		this.refreshDialPolling();
 		this.refreshMediaPolling();
 	}
 
@@ -123,6 +146,8 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 	 */
 	override onTitleParametersDidChange(ev: TitleParametersDidChangeEvent<VolumeSettings>): void {
 		nativeTitleByAction.set(ev.action.id, ev.payload.title);
+		// Stream Deck may have redrawn the title itself, so don't trust the last-sent feedback to match.
+		lastFeedbackKeyByAction.delete(ev.action.id);
 
 		const settings = this.lastSettings.get(ev.action.id);
 		if (settings && ev.action.isDial()) {
@@ -132,26 +157,36 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 		}
 	}
 
-	private startPolling(action: DialAction<VolumeSettings>): void {
-		this.stopPolling(action.id);
-		this.pollIntervals.set(
-			action.id,
-			setInterval(() => {
-				const settings = this.lastSettings.get(action.id);
-				if (!settings) return;
-				updateFeedback(action, settings).catch((error) =>
-					streamDeck.logger.error("Failed to refresh dial feedback", error)
-				);
-			}, 2000)
-		);
+	/**
+	 * Starts the shared dial refresh while any dial is visible, and stops it once none are.
+	 */
+	private refreshDialPolling(): void {
+		if (this.visibleActions.size > 0 && !this.dialRefreshInterval) {
+			this.dialRefreshInterval = setInterval(() => this.refreshAllDials(), DIAL_REFRESH_INTERVAL_MS);
+		} else if (this.visibleActions.size === 0 && this.dialRefreshInterval) {
+			clearInterval(this.dialRefreshInterval);
+			this.dialRefreshInterval = undefined;
+		}
 	}
 
-	private stopPolling(actionId: string): void {
-		const interval = this.pollIntervals.get(actionId);
-		if (interval) {
-			clearInterval(interval);
-			this.pollIntervals.delete(actionId);
+	/**
+	 * Re-checks every visible dial against one shared snapshot of Windows' audio sessions. Dials whose
+	 * display hasn't changed aren't re-sent (see {@link sendFeedbackIfChanged}), so a quiet tick costs
+	 * little more than that one enumeration.
+	 */
+	private refreshAllDials(filter?: (settings: VolumeSettings) => boolean): Promise<void> {
+		const sessions = tryGetNamedAudioSessions();
+		const updates: Promise<void>[] = [];
+		for (const [actionId, action] of this.visibleActions) {
+			const settings = this.lastSettings.get(actionId);
+			if (!settings || (filter && !filter(settings))) continue;
+			updates.push(
+				updateFeedback(action, settings, sessions).catch((error) => {
+					streamDeck.logger.error("Failed to refresh dial feedback", error);
+				})
+			);
 		}
+		return Promise.all(updates).then(() => undefined);
 	}
 
 	/**
@@ -205,14 +240,8 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 	 * Re-sends feedback for every visible dial currently in "Play / Pause Media" mode, so they pick up
 	 * the latest {@link cachedPlaybackStatus} (its paused-icon overlay) right away.
 	 */
-	private async refreshPlayPauseDials(): Promise<void> {
-		for (const [actionId, action] of this.visibleActions) {
-			const settings = this.lastSettings.get(actionId);
-			if (settings?.pushButtonAction !== "playPause") continue;
-			await updateFeedback(action, settings).catch((error) =>
-				streamDeck.logger.error("Failed to refresh play/pause dial feedback", error)
-			);
-		}
+	private refreshPlayPauseDials(): Promise<void> {
+		return this.refreshAllDials((settings) => settings.pushButtonAction === "playPause");
 	}
 
 	/**
@@ -222,10 +251,10 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 	 */
 	override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<VolumeSettings>): Promise<void> {
 		if (!ev.action.isDial()) return;
+		this.applyToApps(ev.payload.settings);
 		this.lastSettings.set(ev.action.id, ev.payload.settings);
 		this.refreshMediaPolling();
 		await updateFeedback(ev.action, ev.payload.settings);
-		this.applyToApps(ev.payload.settings);
 	}
 
 	/**
@@ -245,18 +274,18 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 		const currentVolume = settings.volume ?? 50;
 		settings.volume = Math.max(0, Math.min(100, currentVolume + ev.payload.ticks * stepSize));
 
-		await ev.action.setSettings(settings);
-		this.lastSettings.set(ev.action.id, settings);
-		await updateFeedback(ev.action, settings);
-
+		// The audible change goes first, so the dial doesn't feel like it lags behind saving/redrawing.
 		this.applyToApps(settings);
+		this.lastSettings.set(ev.action.id, settings);
+		await Promise.all([updateFeedback(ev.action, settings), ev.action.setSettings(settings)]);
 	}
 
 	/**
 	 * Handle the dial's push button - either toggles mute or sends the media play/pause key,
-	 * depending on the configured {@link VolumeSettings.pushButtonAction}.
+	 * depending on the configured {@link VolumeSettings.pushButtonAction}. Fires on press rather than
+	 * release, so it reacts the moment the dial goes down - nothing here uses a long-press.
 	 */
-	override async onDialUp(ev: DialUpEvent<VolumeSettings>): Promise<void> {
+	override async onDialDown(ev: DialDownEvent<VolumeSettings>): Promise<void> {
 		await this.handlePress(ev);
 	}
 
@@ -276,7 +305,7 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 	 * this plugin itself causes the change. A press when the status isn't known yet is assumed to be
 	 * pausing something that was playing, since that's the far more common reason to press this button.
 	 */
-	private async handlePress(ev: DialUpEvent<VolumeSettings> | TouchTapEvent<VolumeSettings>): Promise<void> {
+	private async handlePress(ev: DialDownEvent<VolumeSettings> | TouchTapEvent<VolumeSettings>): Promise<void> {
 		if (ev.payload.settings.pushButtonAction === "playPause") {
 			sendMediaPlayPause();
 			this.lastMediaPressAt = Date.now();
@@ -291,7 +320,7 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 	/**
 	 * Shared mute-toggle logic for both the dial's push button and its touch screen.
 	 */
-	private async toggleMute(ev: DialUpEvent<VolumeSettings> | TouchTapEvent<VolumeSettings>): Promise<void> {
+	private async toggleMute(ev: DialDownEvent<VolumeSettings> | TouchTapEvent<VolumeSettings>): Promise<void> {
 		const { settings } = ev.payload;
 
 		if (settings.isMuted) {
@@ -303,11 +332,9 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 			settings.previousVolume = settings.volume ?? 50;
 		}
 
-		await ev.action.setSettings(settings);
-		this.lastSettings.set(ev.action.id, settings);
-		await updateFeedback(ev.action, settings);
-
 		this.applyToApps(settings);
+		this.lastSettings.set(ev.action.id, settings);
+		await Promise.all([updateFeedback(ev.action, settings), ev.action.setSettings(settings)]);
 	}
 
 	/**
@@ -463,6 +490,26 @@ const iconResolutionInFlight = new Set<string>();
 const nativeTitleByAction = new Map<string, string>();
 
 /**
+ * A compact fingerprint of the feedback last sent to each dial (action id), so an unchanged display
+ * isn't re-sent to Stream Deck on every refresh tick - see {@link sendFeedbackIfChanged}. Cleared
+ * whenever the on-device display may no longer match it (dial reappearing, native title edited).
+ */
+const lastFeedbackKeyByAction = new Map<string, string>();
+
+/**
+ * Sends feedback to a dial unless it's identical (by `key`) to what was last sent to it. If sending
+ * fails the key is forgotten, so the next refresh retries rather than assuming it landed.
+ */
+function sendFeedbackIfChanged(action: DialAction<VolumeSettings>, key: string, feedback: FeedbackPayload): Promise<void> {
+	if (lastFeedbackKeyByAction.get(action.id) === key) return Promise.resolve();
+	lastFeedbackKeyByAction.set(action.id, key);
+	return action.setFeedback(feedback).catch((error) => {
+		if (lastFeedbackKeyByAction.get(action.id) === key) lastFeedbackKeyByAction.delete(action.id);
+		throw error;
+	});
+}
+
+/**
  * Generic mixer glyph shown on the dial when none of the configured apps are currently running - the
  * same speaker + fader-lines combo icon used as the action's main icon (see manifest.json). Referenced
  * as a file path (rather than embedded base64) since Stream Deck's device rendering doesn't reliably
@@ -508,6 +555,10 @@ const PAUSE_OVERLAY_SVG = `
  * 1.1-only renderers.
  */
 function buildIconWithOverlay(iconAbsPath: string, overlaySvg: string): string | undefined {
+	const cacheKey = `${iconAbsPath}|${overlaySvg}`;
+	const cached = overlaidIconCache.get(cacheKey);
+	if (cached) return cached;
+
 	const dataUri = readIconAsDataUri(iconAbsPath);
 	if (!dataUri) return undefined;
 
@@ -516,7 +567,25 @@ function buildIconWithOverlay(iconAbsPath: string, overlaySvg: string): string |
 ${overlaySvg}
 </svg>`;
 
-	return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+	const result = `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+	overlaidIconCache.set(cacheKey, result);
+	return result;
+}
+
+/**
+ * In-memory caches of icon files read back from disk ({@link readIconAsDataUri}) and of their overlaid
+ * variants ({@link buildIconWithOverlay}), keyed by file path (plus overlay markup), so a muted/paused
+ * dial or the app picker doesn't re-read and re-encode the same PNG on every refresh. Entries for a path
+ * are dropped whenever {@link saveIconFile} rewrites that file.
+ */
+const iconDataUriCache = new Map<string, string>();
+const overlaidIconCache = new Map<string, string>();
+
+function invalidateIconCaches(filePath: string): void {
+	iconDataUriCache.delete(filePath);
+	for (const key of Array.from(overlaidIconCache.keys())) {
+		if (key.startsWith(`${filePath}|`)) overlaidIconCache.delete(key);
+	}
 }
 
 /**
@@ -554,16 +623,14 @@ function resolveIconFeedbackValue(iconAbsPath: string, isMuted: boolean, isPause
 
 /**
  * Finds the first configured app (in list order) that's currently running/has an audio session.
+ * Takes an already-fetched session list when the caller has one (e.g. a refresh covering several
+ * dials), and only enumerates sessions itself otherwise.
  */
-function findRunningApp(applications: string[] | undefined): string | undefined {
+function findRunningApp(applications: string[] | undefined, sessions?: AudioSession[]): string | undefined {
 	if (!applications || applications.length === 0) return undefined;
 
-	let sessions;
-	try {
-		sessions = getNamedAudioSessions();
-	} catch {
-		return undefined;
-	}
+	sessions ??= tryGetNamedAudioSessions();
+	if (!sessions) return undefined;
 
 	const running = new Set(sessions.map((session) => session.name.toLowerCase()));
 	return applications.find((app) => running.has(app.toLowerCase()));
@@ -589,11 +656,14 @@ function findRunningApp(applications: string[] | undefined): string | undefined 
  * "title" are silently ignored until the user edits it again (or clears it). So the app-name/fallback
  * text above only visibly takes effect while that native field is empty; this is a platform rule, not
  * something this plugin can override without abandoning the built-in "$B1" layout entirely.
+ *
+ * Nothing is sent if the result is identical to what this dial is already showing (see
+ * {@link sendFeedbackIfChanged}), which is the common case on a periodic refresh.
  */
-function updateFeedback(action: DialAction<VolumeSettings>, settings: VolumeSettings): Promise<void> {
+function updateFeedback(action: DialAction<VolumeSettings>, settings: VolumeSettings, sessions?: AudioSession[]): Promise<void> {
 	const volume = settings.volume ?? 50;
 	const barValue = settings.isMuted ? 0 : volume;
-	const runningApp = findRunningApp(settings.applications);
+	const runningApp = findRunningApp(settings.applications, sessions);
 	const appKey = runningApp?.toLowerCase();
 	const iconPath = appKey ? iconCache.get(appKey)?.path : undefined;
 
@@ -622,12 +692,16 @@ function updateFeedback(action: DialAction<VolumeSettings>, settings: VolumeSett
 	// Only a dial actually in "Play / Pause Media" mode shows the paused badge - the cached status is
 	// shared globally, but a Mute/Unmute dial has nothing to do with media playback.
 	const isPaused = settings.pushButtonAction === "playPause" && cachedPlaybackStatus === "paused";
+	const isMuted = settings.isMuted ?? false;
+
+	// Everything the on-device display depends on, built from the icon's source path and overlay flags
+	// rather than the (possibly large, base64) icon value itself.
+	const feedbackKey = (iconSource: string) => JSON.stringify([title, volume, barValue, dimColor, iconSource, isMuted, isPaused]);
 
 	const feedback: FeedbackPayload = {
 		title,
 		value: { value: `${volume}%`, color: dimColor },
-		indicator: { value: barValue, bar_fill_c: dimColor },
-		icon: resolveIconFeedbackValue(iconPath ?? DEFAULT_MIXER_ICON_ABS_PATH, settings.isMuted ?? false, isPaused)
+		indicator: { value: barValue, bar_fill_c: dimColor }
 	};
 
 	if (runningApp && appKey && !iconPath && !iconResolutionInFlight.has(appKey)) {
@@ -644,13 +718,17 @@ function updateFeedback(action: DialAction<VolumeSettings>, settings: VolumeSett
 				// higher-priority one) while extraction was in flight - re-check live rather than
 				// blindly applying a stale snapshot, which would clobber a more recent, correct update.
 				if (findRunningApp(settings.applications) !== runningApp) return;
-				return action.setFeedback({ ...feedback, icon: resolveIconFeedbackValue(savedPath, settings.isMuted ?? false, isPaused) });
+				return sendFeedbackIfChanged(action, feedbackKey(savedPath), {
+					...feedback,
+					icon: resolveIconFeedbackValue(savedPath, isMuted, isPaused)
+				});
 			})
 			.catch((error) => streamDeck.logger.error(`Failed to load icon for ${runningApp}`, error))
 			.finally(() => iconResolutionInFlight.delete(appKey));
 	}
 
-	return action.setFeedback(feedback);
+	const iconSource = iconPath ?? DEFAULT_MIXER_ICON_ABS_PATH;
+	return sendFeedbackIfChanged(action, feedbackKey(iconSource), { ...feedback, icon: resolveIconFeedbackValue(iconSource, isMuted, isPaused) });
 }
 
 /**
@@ -666,6 +744,7 @@ function saveIconFile(appKey: string, dataUri: string): string | undefined {
 		const fileName = `${appKey.replace(/[^a-z0-9.-]/gi, "_")}.png`;
 		const filePath = path.join(DYNAMIC_ICON_DIR, fileName);
 		fs.writeFileSync(filePath, Buffer.from(match[1], "base64"));
+		invalidateIconCaches(filePath);
 		return filePath;
 	} catch (error) {
 		streamDeck.logger.error(`Failed to save icon file for ${appKey}`, error);
@@ -678,8 +757,13 @@ function saveIconFile(appKey: string, dataUri: string): string | undefined {
  * (a browser context, where a data URI is simpler and more portable than a filesystem path).
  */
 function readIconAsDataUri(filePath: string): string | undefined {
+	const cached = iconDataUriCache.get(filePath);
+	if (cached) return cached;
+
 	try {
-		return `data:image/png;base64,${fs.readFileSync(filePath).toString("base64")}`;
+		const dataUri = `data:image/png;base64,${fs.readFileSync(filePath).toString("base64")}`;
+		iconDataUriCache.set(filePath, dataUri);
+		return dataUri;
 	} catch (error) {
 		streamDeck.logger.error(`Failed to read cached icon file ${filePath}`, error);
 		return undefined;
