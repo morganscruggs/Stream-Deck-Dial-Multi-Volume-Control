@@ -1,0 +1,11 @@
+{
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "video": "node render-video.mjs"
+    },
+    "devDependencies": {
+        "ffmpeg-static": "^5.2.0",
+        "puppeteer-core": "^24.0.0"
+    }
+}
