@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Multi Volume Gallery</title>
+<!-- Source for the Marketplace gallery PNGs (1920x960). Render with render.ps1; each slide is
+     selected by URL hash (#1..#5). App icons are generic illustrations, not third-party logos. -->
+<style>
+  :root {
+    --bg1: #1b1e25; --bg2: #0e1014;
+    --ink: #f4f5f7; --muted: #9aa0ab; --accent: #7c5cff; --red: #ff3b30; --dim: #5a5a5a;
+    --strip: #000; --panel: #24262c;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1920px; height: 960px; overflow: hidden; background: var(--bg2); }
+  body { font-family: "Segoe UI", system-ui, sans-serif; color: var(--ink); }
+  .slide { display: none; position: absolute; inset: 0; padding: 80px 110px;
+    background: radial-gradient(1200px 700px at 75% 40%, #2a2550 0%, transparent 60%), linear-gradient(135deg, var(--bg1), var(--bg2)); }
+  .slide.on { display: flex; }
+  h1 { font-size: 76px; font-weight: 700; letter-spacing: -1.5px; line-height: 1.05; }
+  h2 { font-size: 60px; font-weight: 700; letter-spacing: -1px; line-height: 1.1; }
+  p.lead { font-size: 32px; color: var(--muted); line-height: 1.35; margin-top: 24px; }
+  .col { display: flex; flex-direction: column; justify-content: center; }
+
+  /* ---- Device: touch strip of $B1 dial layouts + knobs (stylised Stream Deck+ lower half) ---- */
+  .device { background: linear-gradient(#2b2d33, #1a1b1f); border-radius: 36px; padding: 34px 38px 40px;
+    box-shadow: 0 40px 80px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.08); }
+  .strip { display: flex; background: var(--strip); border-radius: 10px; overflow: hidden; border: 2px solid #111; }
+  .seg { position: relative; width: 300px; height: 150px; flex: none; }
+  .seg + .seg { border-left: 1px solid #1a1a1a; }
+  /* $B1 rects at 1.5x: title [16,10,136,24], icon [16,40,48,48], value [76,40,108,32], indicator [76,74,108,20] */
+  .seg .t { position: absolute; left: 24px; top: 15px; width: 252px; font-size: 25px; font-weight: 600; white-space: nowrap; overflow: hidden; }
+  .seg .i { position: absolute; left: 24px; top: 60px; width: 72px; height: 72px; }
+  .seg .i svg, .seg .i img { width: 100%; height: 100%; display: block; }
+  .seg .v { position: absolute; left: 114px; top: 60px; width: 162px; text-align: right; font-size: 30px; font-weight: 600; }
+  .seg .bar { position: absolute; left: 114px; top: 117px; width: 162px; height: 10px; border-radius: 5px; background: #333; }
+  .seg .bar i { display: block; height: 100%; border-radius: 5px; background: #fff; }
+  .seg.dim .v { color: var(--dim); } .seg.dim .bar i { background: var(--dim); }
+  .knobs { display: flex; margin-top: 30px; }
+  .knob { width: 300px; display: flex; justify-content: center; }
+  .knob div { width: 128px; height: 128px; border-radius: 50%;
+    background: repeating-conic-gradient(#3a3c42 0 4deg, #2a2c31 4deg 8deg);
+    box-shadow: 0 10px 24px rgba(0,0,0,.6), inset 0 0 0 10px #1e1f23, inset 0 2px 0 12px rgba(255,255,255,.05); }
+
+  .tag { display: inline-block; font-size: 22px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #b9a8ff; margin-bottom: 18px; }
+  .cap { font-size: 26px; color: var(--muted); text-align: center; margin-top: 18px; }
+
+  /* ---- Property inspector replica (styles mirror ui/volume-control.html, scaled 2x) ---- */
+  .pi { width: 760px; background: var(--panel); border-radius: 16px; padding: 34px 36px; font-size: 26px; color: #ddd;
+    box-shadow: 0 40px 80px rgba(0,0,0,.5); border: 1px solid #333; }
+  .pi .row { display: flex; align-items: flex-start; gap: 24px; margin-bottom: 26px; }
+  .pi .lbl { width: 190px; flex: none; text-align: right; color: #bbb; padding-top: 10px; }
+  .pi .ctl { flex: 1; }
+  .pi .range { display: flex; align-items: center; gap: 14px; padding-top: 10px; }
+  .pi .track { flex: 1; height: 8px; background: #555; border-radius: 4px; position: relative; }
+  .pi .track b { position: absolute; left: 0; top: 0; height: 100%; width: 44%; background: #ddd; border-radius: 4px; }
+  .pi .track s { position: absolute; left: 44%; top: 50%; width: 26px; height: 26px; margin: -13px; border-radius: 50%; background: #eee; }
+  .pi .sel, .pi .pick { background: #2f2f2f; border: 2px solid #555; border-radius: 8px; padding: 10px 16px; display: flex; align-items: center; gap: 16px; }
+  .pi .sel span:last-child, .pi .pick .chev { margin-left: auto; opacity: .7; font-size: 20px; }
+  .pi .chk { width: 34px; height: 34px; border-radius: 6px; background: #ddd; color: #222; display: grid; place-items: center; font-weight: 700; margin-top: 6px; }
+  .pi .apps { display: flex; flex-direction: column; gap: 8px; }
+  .pi .arow { display: flex; gap: 12px; align-items: center; }
+  .pi .pick { flex: 1; }
+  .pi .pick svg { width: 36px; height: 36px; flex: none; }
+  .pi .btn { width: 44px; height: 44px; border: 2px solid #555; border-radius: 8px; background: #2f2f2f; color: #bbb; display: grid; place-items: center; font-size: 20px; flex: none; }
+  .pi .btn.off { opacity: .3; }
+  .pi .list { background: #2f2f2f; border: 2px solid #555; border-radius: 8px; margin-top: -4px; }
+  .pi .list div { display: flex; align-items: center; gap: 16px; padding: 10px 16px; }
+  .pi .list div.hl { background: #454545; }
+  .pi .list svg { width: 36px; height: 36px; }
+  .pi .list .off { opacity: .6; font-style: italic; }
+
+  .callouts { display: flex; flex-direction: column; gap: 34px; }
+  .callout { display: flex; gap: 22px; align-items: flex-start; }
+  .callout .n { width: 52px; height: 52px; border-radius: 50%; background: var(--accent); display: grid; place-items: center; font-size: 26px; font-weight: 700; flex: none; }
+  .callout h3 { font-size: 34px; font-weight: 600; }
+  .callout p { font-size: 25px; color: var(--muted); margin-top: 4px; line-height: 1.35; }
+
+  /* ---- Windows-style volume mixer card (slide 1.2) ---- */
+  .mixer { background: var(--panel); border: 1px solid #333; border-radius: 16px; box-shadow: 0 40px 80px rgba(0,0,0,.5); padding: 0 30px; }
+  .mx-h { height: 90px; display: flex; align-items: center; font-size: 28px; font-weight: 600; border-bottom: 1px solid #333; }
+  .mx-row { height: 120px; display: flex; align-items: center; gap: 22px; opacity: .45; }
+  .mx-row.on { opacity: 1; }
+  .mx-row > svg, .mx-row > img { width: 60px; height: 60px; flex: none; object-fit: contain; }
+  .mx-b { flex: 1; }
+  .mx-n { font-size: 26px; font-weight: 600; }
+  .mx-n em { font-style: normal; font-weight: 400; font-size: 20px; color: var(--muted); margin-left: 10px; }
+  .mx-s { display: flex; align-items: center; gap: 18px; margin-top: 14px; }
+  .mx-s span { width: 40px; text-align: right; font-size: 24px; color: #ccc; }
+  .mx-t { flex: 1; height: 8px; border-radius: 4px; background: #555; position: relative; }
+  .mx-t b { position: absolute; left: 0; top: 0; height: 100%; border-radius: 4px; background: #ddd; }
+  .mx-row.on .mx-t b { background: var(--accent); }
+  .mx-t s { position: absolute; top: 50%; width: 26px; height: 26px; margin: -13px; border-radius: 50%; background: #eee; box-shadow: 0 0 0 5px #24262c; }
+
+  .mixer.sm .mx-h { height: 80px; }
+  .mixer.sm .mx-row { height: 110px; }
+  .seg.hl { box-shadow: inset 0 0 0 4px var(--accent); }
+
+  .badge { display: inline-flex; gap: 10px; align-items: center; font-size: 24px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- Generic app icons (drawn here; deliberately not real third-party logos). -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="game" viewBox="0 0 100 100"><rect x="4" y="4" width="92" height="92" rx="22" fill="#7c5cff"/><path d="M28 36h44a14 14 0 0 1 13 18l-4 14a8 8 0 0 1-13 3l-8-8H40l-8 8a8 8 0 0 1-13-3l-4-14a14 14 0 0 1 13-18z" fill="#fff"/><rect x="30" y="44" width="4" height="14" fill="#7c5cff"/><rect x="25" y="49" width="14" height="4" fill="#7c5cff"/><circle cx="66" cy="47" r="3.5" fill="#7c5cff"/><circle cx="73" cy="54" r="3.5" fill="#7c5cff"/></symbol>
+    <symbol id="game2" viewBox="0 0 100 100"><rect x="4" y="4" width="92" height="92" rx="22" fill="#e0672b"/><path d="M50 18l8 22h24l-19 14 7 23-20-14-20 14 7-23-19-14h24z" fill="#fff"/></symbol>
+    <symbol id="game3" viewBox="0 0 100 100"><rect x="4" y="4" width="92" height="92" rx="22" fill="#1f9d8a"/><path d="M50 16l30 14v20c0 18-13 30-30 36-17-6-30-18-30-36V30z" fill="#fff"/><path d="M50 30v42c-10-4-18-12-18-24V38z" fill="#1f9d8a"/></symbol>
+    <symbol id="music" viewBox="0 0 100 100"><rect x="4" y="4" width="92" height="92" rx="22" fill="#20b15a"/><path d="M40 26l34-8v44a10 10 0 1 1-6-9V32l-22 5v31a10 10 0 1 1-6-9z" fill="#fff"/></symbol>
+    <symbol id="chat" viewBox="0 0 100 100"><rect x="4" y="4" width="92" height="92" rx="22" fill="#3b82f6"/><path d="M24 30a8 8 0 0 1 8-8h36a8 8 0 0 1 8 8v26a8 8 0 0 1-8 8H46l-14 12V64a8 8 0 0 1-8-8z" fill="#fff"/><circle cx="38" cy="43" r="4" fill="#3b82f6"/><circle cx="50" cy="43" r="4" fill="#3b82f6"/><circle cx="62" cy="43" r="4" fill="#3b82f6"/></symbol>
+    <symbol id="web" viewBox="0 0 100 100"><rect x="4" y="4" width="92" height="92" rx="22" fill="#f59e0b"/><circle cx="50" cy="50" r="26" fill="none" stroke="#fff" stroke-width="6"/><ellipse cx="50" cy="50" rx="11" ry="26" fill="none" stroke="#fff" stroke-width="5"/><path d="M24 50h52" stroke="#fff" stroke-width="5"/></symbol>
+    <symbol id="video" viewBox="0 0 100 100"><rect x="4" y="4" width="92" height="92" rx="22" fill="#e11d48"/><path d="M40 32l30 18-30 18z" fill="#fff"/></symbol>
+    <!-- Overlays copied from volume-control.ts (buildMutedIcon / PAUSE_OVERLAY_SVG). -->
+    <symbol id="mute" viewBox="0 0 100 100"><line x1="6" y1="6" x2="94" y2="94" stroke="#000" stroke-width="17" stroke-linecap="round"/><line x1="6" y1="6" x2="94" y2="94" stroke="#ff3b30" stroke-width="9" stroke-linecap="round"/></symbol>
+    <symbol id="pause" viewBox="0 0 100 100"><rect x="29" y="18" width="14" height="64" rx="7" fill="#ff3b30" stroke="#000" stroke-width="4"/><rect x="57" y="18" width="14" height="64" rx="7" fill="#ff3b30" stroke="#000" stroke-width="4"/></symbol>
+  </defs>
+</svg>
+
+<template id="seg">
+  <div class="seg"><div class="t"></div><div class="i"></div><div class="v"></div><div class="bar"><i></i></div></div>
+</template>
+
+<!-- 1. Hero / thumbnail -->
+<section class="slide" id="s1" style="align-items:center; gap:70px;">
+  <div class="col" style="width:640px; flex:none;">
+    <img src="../../volume-control-multi-dials/com.morgan-scruggs.volume-control-multi-dials.sdPlugin/imgs/plugin/marketplace@2x.png" style="width:150px;height:150px;border-radius:28px;margin-bottom:40px;">
+    <h1>Multi Volume Controller</h1>
+    <p class="lead">Per-app Windows volume on your Stream Deck+ dials.</p>
+  </div>
+  <div class="device" style="zoom:0.85;" data-strip='[["Games","game",80,"","",""],["Media","music",35,"","",""],["Chat","chat",100,"","",""],["Muted","web",60,"mute","dim",""]]'></div>
+</section>
+
+<!-- 1.2 Hero variant: one "Media" dial driving several media apps in a Windows-style volume mixer.
+     Uses the apps' real icons (icons/, extracted from the installed apps) since that's what the plugin shows. -->
+<section class="slide" id="s1.2" style="align-items:center; gap:50px;">
+  <div class="col" style="width:540px; flex:none;">
+    <img src="../../volume-control-multi-dials/com.morgan-scruggs.volume-control-multi-dials.sdPlugin/imgs/plugin/marketplace@2x.png" style="width:150px;height:150px;border-radius:28px;margin-bottom:40px;">
+    <h1>Multi Volume Controller</h1>
+    <p class="lead">One dial for all your media. Every app on the dial's list moves together.</p>
+  </div>
+  <div style="position:relative; width:1120px; height:640px; flex:none;">
+    <div class="device" style="position:absolute; left:0; top:129px;" data-strip='[["Media","icons/chrome.png",70,"","",""]]'></div>
+    <svg style="position:absolute; inset:0; overflow:visible;" width="1120" height="640">
+      <g fill="none" stroke="#7c5cff" stroke-width="5" stroke-linecap="round">
+        <path d="M376 240 C 480 240, 480 150, 584 150"/>
+        <path d="M376 240 C 480 240, 480 270, 584 270"/>
+        <path d="M376 240 C 480 240, 480 390, 584 390"/>
+      </g>
+      <circle cx="376" cy="240" r="9" fill="#7c5cff"/>
+    </svg>
+    <div class="mixer" style="position:absolute; left:580px; top:0; width:540px; height:640px;">
+      <div class="mx-h">Volume mixer</div>
+      <div class="mx-row on"><img src="icons/chrome.png"><div class="mx-b"><div class="mx-n">Google Chrome</div><div class="mx-s"><div class="mx-t"><b style="width:70%"></b><s style="left:70%"></s></div><span>70</span></div></div></div>
+      <div class="mx-row on"><img src="icons/vlc.png"><div class="mx-b"><div class="mx-n">VLC media player</div><div class="mx-s"><div class="mx-t"><b style="width:70%"></b><s style="left:70%"></s></div><span>70</span></div></div></div>
+      <div class="mx-row on"><img src="icons/mediaplayer.png"><div class="mx-b"><div class="mx-n">Windows Media Player</div><div class="mx-s"><div class="mx-t"><b style="width:70%"></b><s style="left:70%"></s></div><span>70</span></div></div></div>
+      <div class="mx-row"><svg><use href="#game"/></svg><div class="mx-b"><div class="mx-n">Game <em>not on this dial</em></div><div class="mx-s"><div class="mx-t"><b style="width:40%"></b><s style="left:40%"></s></div><span>40</span></div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 1.3 Hero combining 1 and 1.2: the four-dial strip, with the Media dial fanning out to the volume mixer. -->
+<section class="slide" id="s1.3" style="flex-direction:column; justify-content:center; gap:44px;">
+  <div style="display:flex; align-items:center; gap:36px;">
+    <img src="../../volume-control-multi-dials/com.morgan-scruggs.volume-control-multi-dials.sdPlugin/imgs/plugin/marketplace@2x.png" style="width:120px;height:120px;border-radius:24px;">
+    <div>
+      <h1 style="font-size:68px;">Multi Volume Controller</h1>
+      <p class="lead" style="margin-top:10px; font-size:30px;">Per-app Windows volume on your Stream Deck+ dials. Put several apps on one dial and they move together.</p>
+    </div>
+  </div>
+  <div style="position:relative; width:1700px; height:560px;">
+    <div class="device" style="position:absolute; left:0; top:157px; zoom:0.8;" data-strip='[["Games","game",80,"","",""],["Chat","chat",100,"","",""],["Muted","video",60,"mute","dim",""],["Media","icons/chrome.png",70,"","","hl"]]'></div>
+    <svg style="position:absolute; inset:0; overflow:visible;" width="1700" height="560">
+      <g fill="none" stroke="#7c5cff" stroke-width="5" stroke-linecap="round">
+        <path d="M1022 214 C 1081 214, 1081 135, 1140 135"/>
+        <path d="M1022 214 C 1081 214, 1081 245, 1140 245"/>
+        <path d="M1022 214 C 1081 214, 1081 355, 1140 355"/>
+      </g>
+      <circle cx="1022" cy="214" r="9" fill="#7c5cff"/>
+    </svg>
+    <div class="mixer sm" style="position:absolute; left:1140px; top:0; width:560px; height:560px;">
+      <div class="mx-h">Volume mixer</div>
+      <div class="mx-row on"><img src="icons/chrome.png"><div class="mx-b"><div class="mx-n">Google Chrome</div><div class="mx-s"><div class="mx-t"><b style="width:70%"></b><s style="left:70%"></s></div><span>70</span></div></div></div>
+      <div class="mx-row on"><img src="icons/vlc.png"><div class="mx-b"><div class="mx-n">VLC media player</div><div class="mx-s"><div class="mx-t"><b style="width:70%"></b><s style="left:70%"></s></div><span>70</span></div></div></div>
+      <div class="mx-row on"><img src="icons/mediaplayer.png"><div class="mx-b"><div class="mx-n">Windows Media Player</div><div class="mx-s"><div class="mx-t"><b style="width:70%"></b><s style="left:70%"></s></div><span>70</span></div></div></div>
+      <div class="mx-row"><svg><use href="#game"/></svg><div class="mx-b"><div class="mx-n">Game One <em>on the Games dial</em></div><div class="mx-s"><div class="mx-t"><b style="width:80%"></b><s style="left:80%"></s></div><span>80</span></div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 2. Several apps per dial, priority order -->
+<section class="slide" id="s2" style="flex-direction:column; align-items:center; justify-content:center;">
+  <span class="tag">Several apps per dial</span>
+  <h2 style="text-align:center;">One dial for your whole game library</h2>
+  <p class="lead" style="text-align:center; margin-top:14px;">Every running app on the list follows the dial. The strip shows the highest-ranked one.</p>
+  <div style="display:flex; gap:70px; align-items:center; margin-top:56px;">
+    <div class="pi" style="width:620px; padding:28px 30px;">
+      <div class="apps">
+        <div class="arow"><div class="pick"><svg><use href="#game"/></svg>Game One</div><div class="btn">✕</div><div class="btn off">▲</div></div>
+        <div class="arow"><div class="pick"><svg><use href="#game2"/></svg>Game Two</div><div class="btn">✕</div><div class="btn">▲</div></div>
+        <div class="arow"><div class="pick"><svg><use href="#game3"/></svg>Game Three</div><div class="btn">✕</div><div class="btn">▲</div></div>
+        <div class="arow"><div class="pick" style="color:#999;">Select an application<span class="chev">▾</span></div></div>
+      </div>
+    </div>
+    <div style="font-size:64px; color:var(--muted);">→</div>
+    <div style="display:flex; gap:40px;">
+      <div><div class="device" style="padding:22px;" data-strip='[["Game One","game",70,"","",""]]'></div><div class="cap">Game One running</div></div>
+      <div><div class="device" style="padding:22px;" data-strip='[["Game Three","game3",70,"","",""]]'></div><div class="cap">Only Game Three running</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 3. Settings panel -->
+<section class="slide" id="s3" style="align-items:center; gap:90px;">
+  <div class="pi" style="flex:none;">
+    <div class="row"><div class="lbl">Step Size</div><div class="ctl range"><span>1</span><div class="track"><b></b><s></s></div><span>10</span></div></div>
+    <div class="row"><div class="lbl">Push Button</div><div class="ctl"><div class="sel"><span>Play / Pause Media</span><span>▾</span></div></div></div>
+    <div class="row"><div class="lbl">Show Inactive</div><div class="ctl"><div class="chk">✓</div></div></div>
+    <div class="row" style="margin-bottom:0"><div class="lbl">Application</div><div class="ctl apps">
+      <div class="arow"><div class="pick"><svg><use href="#music"/></svg>Music<span class="chev">▾</span></div><div class="btn">✕</div><div class="btn off">▲</div></div>
+      <div class="arow"><div class="pick"><svg><use href="#video"/></svg>Video<span class="chev">▾</span></div><div class="btn">✕</div><div class="btn">▲</div></div>
+      <div class="arow"><div class="pick" style="color:#999;">Select an application<span class="chev">▾</span></div></div>
+      <div class="list">
+        <div class="hl"><svg><use href="#chat"/></svg>Chat</div>
+        <div><svg><use href="#web"/></svg>Browser</div>
+        <div><svg><use href="#game"/></svg><span class="off">Game One (off)</span></div>
+      </div>
+    </div></div>
+  </div>
+  <div class="col">
+    <span class="tag">Settings</span>
+    <h2>Set it up in seconds</h2>
+    <div class="callouts" style="margin-top:44px;">
+      <div class="callout"><div class="n">1</div><div><h3>Pick apps by icon</h3><p>Choose from apps playing sound right now. ▲ raises priority, ✕ removes.</p></div></div>
+      <div class="callout"><div class="n">2</div><div><h3>Choose the button</h3><p>Push or tap to Mute/Unmute, or to Play/Pause media.</p></div></div>
+      <div class="callout"><div class="n">3</div><div><h3>Set the step size</h3><p>1–10% per click, from fine to fast.</p></div></div>
+      <div class="callout"><div class="n">4</div><div><h3>Plan ahead</h3><p>Show Inactive lists apps you've used before, even when they're closed.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 4. States -->
+<section class="slide" id="s4" style="flex-direction:column; align-items:center; justify-content:center;">
+  <span class="tag">Live status</span>
+  <h2 style="text-align:center;">Know every dial's state at a glance</h2>
+  <div style="margin-top:70px;">
+    <div class="device" data-strip='[["Music","music",65,"","",""],["Muted","chat",40,"mute","dim",""],["Video","video",50,"pause","",""],["Multi Volume Dial","mixer",50,"","dim",""]]'></div>
+    <div style="display:flex;">
+      <div class="cap" style="width:300px;">Active</div>
+      <div class="cap" style="width:300px;">Muted</div>
+      <div class="cap" style="width:300px;">Media paused</div>
+      <div class="cap" style="width:300px;">No app running</div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. Controls -->
+<section class="slide" id="s5" style="align-items:center; gap:100px;">
+  <div class="col" style="width:720px; flex:none;">
+    <span class="tag">Controls</span>
+    <h2>Turn, push, or tap</h2>
+    <div class="callouts" style="margin-top:50px;">
+      <div class="callout"><div class="n">1</div><div><h3>Rotate</h3><p>Raise or lower the volume. Rotating also unmutes, restoring the previous level.</p></div></div>
+      <div class="callout"><div class="n">2</div><div><h3>Push the dial</h3><p>Mute/Unmute, or Play/Pause media, per dial.</p></div></div>
+      <div class="callout"><div class="n">3</div><div><h3>Tap the touch strip</h3><p>Does the same as pushing the dial.</p></div></div>
+    </div>
+  </div>
+  <div class="device" data-strip='[["Game One","game",45,"","",""],["Music","music",80,"pause","",""]]'></div>
+</section>
+
+<script>
+  const MIXER = "../../volume-control-multi-dials/com.morgan-scruggs.volume-control-multi-dials.sdPlugin/imgs/actions/volume/icon@2x.png";
+  const tpl = document.getElementById("seg");
+  document.querySelectorAll(".device[data-strip]").forEach((dev) => {
+    const dials = JSON.parse(dev.dataset.strip);
+    const strip = document.createElement("div"); strip.className = "strip";
+    const knobs = document.createElement("div"); knobs.className = "knobs";
+    dials.forEach(([title, icon, vol, overlay, dim, hl]) => {
+      const seg = tpl.content.firstElementChild.cloneNode(true);
+      if (dim) seg.classList.add("dim");
+      if (hl) seg.classList.add("hl");
+      seg.querySelector(".t").textContent = title;
+      seg.querySelector(".v").textContent = vol + "%";
+      // Muted dials keep showing the saved % but an empty bar, matching updateFeedback's barValue.
+      seg.querySelector(".bar i").style.width = (overlay === "mute" ? 0 : vol) + "%";
+      seg.querySelector(".i").innerHTML = icon === "mixer" || icon.endsWith(".png")
+        ? `<img src="${icon === "mixer" ? MIXER : icon}">`
+        : `<svg viewBox="0 0 100 100"><use href="#${icon}"/>${overlay ? `<use href="#${overlay}"/>` : ""}</svg>`;
+      strip.appendChild(seg);
+      knobs.insertAdjacentHTML("beforeend", "<div class='knob'><div></div></div>");
+    });
+    dev.append(strip, knobs);
+  });
+  const n = location.hash.slice(1) || "1";
+  document.getElementById("s" + n).classList.add("on");
+</script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+Multi Volume Controller turns a Stream Deck+ dial into a volume knob for the Windows apps you choose. Assign one app, or a whole list such as every game you play, to a dial. Turn it to set their volume, then press or tap to mute or play/pause. No need to open the Windows volume mixer.
+
+Features
+• Per-app volume: changes each app's own Windows volume, not your master volume
+• Several apps per dial: every running app on the list follows the dial together
+• Priority order: the touch strip shows the highest-ranked running app with its own icon and name
+• Push or tap: pick Mute/Unmute or Play/Pause media for each dial
+• Step size: 1-10% per dial click
+• Live status: red slash when muted, pause badge when paused, grey bar when none of its apps are running
+• Plan ahead: "Show Inactive" lists apps you've used before, so you can assign a game before launching it
+
+Setup
+1. Drag "Multi Volume Dial" onto a dial.
+2. Under Application, pick an app. A new empty row appears for the next one. Use ▲ to raise its priority or ✕ to remove it.
+3. Set Step Size and Push Button to taste.
+
+Tip: Windows only lists apps that are playing sound. Play something in the app once, or turn on Show Inactive, to see it in the list.
+
+Requirements: Windows 10 or later, Stream Deck 7.1 or later, and a Stream Deck with dials (Stream Deck+).
