@@ -95,17 +95,23 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 	private visibleActions = new Map<string, DialAction<VolumeSettings>>();
 
 	/**
-	 * Shared timer that polls the system media session's playback status once for all dials at once
-	 * (see {@link refreshMediaPolling}), rather than each "Play / Pause Media" dial spawning its own
+	 * Shared timer that polls the system's media sessions once for all dials at once (see
+	 * {@link refreshMediaPolling}), rather than each "Play / Pause Media" dial spawning its own
 	 * PowerShell process on its own schedule.
 	 */
 	private mediaPollInterval?: ReturnType<typeof setInterval>;
 
-	/** Whether a media-status poll is still waiting on its answer (see {@link pollMediaPlaybackStatus}). */
+	/** Whether a media-session poll is still waiting on its answer (see {@link pollMediaSessions}). */
 	private mediaPollInFlight = false;
 
-	/** When this plugin last sent a play/pause key press, for {@link MEDIA_PRESS_GRACE_MS}. */
+	/** When this plugin last sent a play/pause press, for {@link MEDIA_PRESS_GRACE_MS}. */
 	private lastMediaPressAt = 0;
+
+	/**
+	 * The last answer from {@link pollMediaSessions}, so dials are only redrawn when it changes. Cleared
+	 * on a press, since the optimistic update there means the cached sessions no longer match it.
+	 */
+	private lastMediaSessionsJson?: string;
 
 	/**
 	 * Initialize the dial display when it appears, and start polling it while it's visible.
@@ -199,8 +205,8 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 		const needsPolling = Array.from(this.lastSettings.values()).some((settings) => settings.pushButtonAction === "playPause");
 
 		if (needsPolling && !this.mediaPollInterval) {
-			this.mediaPollInterval = setInterval(() => this.pollMediaPlaybackStatus(), MEDIA_POLL_INTERVAL_MS);
-			this.pollMediaPlaybackStatus();
+			this.mediaPollInterval = setInterval(() => this.pollMediaSessions(), MEDIA_POLL_INTERVAL_MS);
+			this.pollMediaSessions();
 		} else if (!needsPolling && this.mediaPollInterval) {
 			clearInterval(this.mediaPollInterval);
 			this.mediaPollInterval = undefined;
@@ -209,27 +215,30 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 	}
 
 	/**
-	 * Refreshes the cached playback status from Windows and pushes it out to every dial that displays
-	 * it. This is the only source of truth correction for state changed elsewhere (a physical media key,
-	 * pausing from within the app itself, etc.) - {@link handlePress} updates the cache optimistically
-	 * and immediately for this plugin's own button presses, without waiting for this poll.
+	 * Refreshes the cached media sessions (see {@link mediaSessions}) from Windows and pushes them out to
+	 * every dial that displays them. This is the only source of truth correction for state changed
+	 * elsewhere (a physical media key, pausing from within the app itself, etc.) - {@link handlePress}
+	 * updates the cache optimistically and immediately for this plugin's own button presses, without
+	 * waiting for this poll.
 	 *
-	 * Dials are only redrawn when the status actually changes, so the frequent poll costs next to nothing
+	 * Dials are only redrawn when the answer actually changes, so the frequent poll costs next to nothing
 	 * the rest of the time. A poll is skipped while the previous one is still waiting on an answer, and a
 	 * result is discarded if it was requested within {@link MEDIA_PRESS_GRACE_MS} of a press - otherwise
 	 * a poll racing the press (or an app slow to report its new state) would briefly flip the overlay back.
 	 */
-	private async pollMediaPlaybackStatus(): Promise<void> {
+	private async pollMediaSessions(): Promise<void> {
 		if (this.mediaPollInFlight) return;
 		this.mediaPollInFlight = true;
 
 		try {
 			const requestedAt = Date.now();
-			const status = await getMediaPlaybackStatus();
+			const json = await queryMediaSessions();
 			if (requestedAt < this.lastMediaPressAt + MEDIA_PRESS_GRACE_MS) return;
-			if (status === cachedPlaybackStatus) return;
+			if (json === this.lastMediaSessionsJson) return;
 
-			cachedPlaybackStatus = status;
+			this.lastMediaSessionsJson = json;
+			streamDeck.logger.info(`[play/pause] media state: ${json}`); // TEMP diagnostics - remove once confirmed.
+			applyMediaSessions(json);
 			await this.refreshPlayPauseDials();
 		} finally {
 			this.mediaPollInFlight = false;
@@ -238,7 +247,7 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 
 	/**
 	 * Re-sends feedback for every visible dial currently in "Play / Pause Media" mode, so they pick up
-	 * the latest {@link cachedPlaybackStatus} (its paused-icon overlay) right away.
+	 * the latest {@link mediaSessions} (their paused-icon overlay) right away.
 	 */
 	private refreshPlayPauseDials(): Promise<void> {
 		return this.refreshAllDials((settings) => settings.pushButtonAction === "playPause");
@@ -290,24 +299,64 @@ export class VolumeControl extends SingletonAction<VolumeSettings> {
 	}
 
 	/**
-	 * Shared press logic for both the dial's push button and its touch screen: sends the media
-	 * play/pause key if the user has configured that, otherwise falls back to the default mute toggle.
+	 * Shared press logic for both the dial's push button and its touch screen: plays/pauses the dial's
+	 * apps if the user has configured that (see {@link togglePlayback}), otherwise falls back to the
+	 * default mute toggle.
 	 *
-	 * The cached playback status is flipped optimistically right here, rather than waiting for the next
-	 * poll tick (up to {@link MEDIA_POLL_INTERVAL_MS} away), so the paused-icon overlay reacts the instant
-	 * this plugin itself causes the change. A press when the status isn't known yet is assumed to be
-	 * pausing something that was playing, since that's the far more common reason to press this button.
+	 * The cached media sessions are updated optimistically by that press, rather than waiting for the
+	 * next poll tick (up to {@link MEDIA_POLL_INTERVAL_MS} away), so the paused-icon overlay reacts the
+	 * instant this plugin itself causes the change.
 	 */
 	private async handlePress(ev: DialDownEvent<VolumeSettings> | TouchTapEvent<VolumeSettings>): Promise<void> {
 		if (ev.payload.settings.pushButtonAction === "playPause") {
-			sendMediaPlayPause();
+			this.togglePlayback(ev.action.id, ev.payload.settings);
 			this.lastMediaPressAt = Date.now();
-			cachedPlaybackStatus = cachedPlaybackStatus === "paused" ? "playing" : "paused";
+			this.lastMediaSessionsJson = undefined;
 			await this.refreshPlayPauseDials();
 			return;
 		}
 
 		await this.toggleMute(ev);
+	}
+
+	/**
+	 * Plays or pauses every configured app on the dial together, each directly in its own app (see
+	 * {@link resolveDialMediaTargets}): if any of them is playing, every one that's playing is paused;
+	 * otherwise whatever {@link getTargetsToResume} picks is resumed.
+	 *
+	 * A dial with no apps configured, or none of whose running apps can be targeted directly, sends the
+	 * global Media Play/Pause key instead - acting on whichever app owns the system's current media
+	 * session, exactly like a physical keyboard's media key. A press when that session's status isn't
+	 * known yet is assumed to be pausing something that was playing, since that's the far more common
+	 * reason to press this button.
+	 */
+	private togglePlayback(actionId: string, settings: VolumeSettings): void {
+		const targets = resolveDialMediaTargets(settings, findRunningApp(settings.applications));
+
+		if (!targets) {
+			sendMediaPlayPause();
+			const current = mediaSessions.find((session) => session.id === currentMediaSessionId);
+			if (current) current.status = current.status === "paused" ? "playing" : "paused";
+			return;
+		}
+		if (targets.length === 0) return;
+
+		// TEMP diagnostics for the play/pause display - remove once confirmed.
+		const describe = (list: MediaTarget[]) => list.map((target) => `${getMediaTargetId(target)} (${target.app})=${getMediaTargetStatus(target)}`).join(", ");
+		streamDeck.logger.info(`[play/pause] targets: ${describe(targets)} | remembered: ${(pausedByDial.get(actionId) ?? []).join(", ") || "none"}`);
+
+		const playing = targets.filter((target) => getMediaTargetStatus(target) === "playing");
+		if (playing.length > 0) {
+			setMediaTargetsPlayback(playing, "paused");
+			pausedByDial.set(actionId, playing.map(getMediaTargetId));
+			streamDeck.logger.info(`[play/pause] paused: ${describe(playing)} | now shows: ${resolveDialDisplay(actionId, settings).displayApp}`);
+			return;
+		}
+
+		const toResume = getTargetsToResume(actionId, targets);
+		setMediaTargetsPlayback(toResume, "playing");
+		pausedByDial.delete(actionId);
+		streamDeck.logger.info(`[play/pause] resumed: ${describe(toResume)} | now shows: ${resolveDialDisplay(actionId, settings).displayApp}`);
 	}
 
 	/**
@@ -612,7 +661,7 @@ function buildMutedIcon(iconAbsPath: string): string | undefined {
 
 /**
  * Builds a version of the given icon with a paused badge over it, for a "Play / Pause Media" dial while
- * {@link cachedPlaybackStatus} is "paused".
+ * its apps are paused (see {@link getDialPlaybackStatus}).
  */
 function buildPausedIcon(iconAbsPath: string): string | undefined {
 	return buildIconWithOverlay(iconAbsPath, PAUSE_OVERLAY_SVG);
@@ -646,17 +695,34 @@ function findRunningApp(applications: string[] | undefined, sessions?: AudioSess
 }
 
 /**
+ * Works out which app a dial shows (its icon and name): its highest-priority running app (see
+ * {@link findRunningApp}) - or, for a "Play / Pause Media" dial, the app a press would act on: its
+ * highest-priority app that's actually playing, if any is, otherwise the highest-priority one a press
+ * would resume (see {@link getTargetsToResume}) - so after a press pauses something, the dial keeps
+ * showing that app, paused. Also returns what that was worked out from, for {@link updateFeedback} to
+ * reuse.
+ */
+function resolveDialDisplay(actionId: string, settings: VolumeSettings, sessions?: AudioSession[]) {
+	const runningApp = findRunningApp(settings.applications, sessions);
+	const mediaTargets = settings.pushButtonAction === "playPause" ? resolveDialMediaTargets(settings, runningApp) : undefined;
+	const playingApp = mediaTargets?.find((target) => getMediaTargetStatus(target) === "playing")?.app;
+	const resumeApp = mediaTargets ? getTargetsToResume(actionId, mediaTargets)[0]?.app : undefined;
+	return { runningApp, mediaTargets, displayApp: playingApp ?? resumeApp ?? runningApp };
+}
+
+/**
  * Refreshes the dial's on-device title/value/indicator/icon to match its current settings.
  *
  * The icon is resolved from the highest-priority configured app that's actually running right now
- * (falling through the list in order); if none are running, a generic mixer icon is shown instead
- * and the progress bar is greyed out, since there's nothing currently controllable. Icon extraction
- * happens off to the side rather than being awaited here, so a not-yet-cached icon never delays the
- * rest of the feedback update - once it resolves, feedback is sent again with the icon included.
+ * (falling through the list in order) - or playing, for a "Play / Pause Media" dial (see
+ * {@link resolveDialDisplay}); if none are running, a generic mixer icon is shown instead and the
+ * progress bar is greyed out, since there's nothing currently controllable. Icon extraction happens
+ * off to the side rather than being awaited here, so a not-yet-cached icon never delays the rest of
+ * the feedback update - once it resolves, feedback is sent again with the icon included.
  *
  * Title logic: the user's own text from Stream Deck's native title editor always wins when present -
  * this plugin doesn't touch the title at all in that case. Only when that native field is empty does
- * the plugin fill it in: the top running app's name, or "Multi Volume Dial" if nothing configured is
+ * the plugin fill it in: the shown app's name, or "Multi Volume Dial" if nothing configured is
  * currently running. Muting still overrides all of that to "Muted", restoring the previous text once
  * unmuted (see {@link nativeTitleByAction}) rather than leaving "Muted" on screen forever.
  *
@@ -672,11 +738,11 @@ function findRunningApp(applications: string[] | undefined, sessions?: AudioSess
 function updateFeedback(action: DialAction<VolumeSettings>, settings: VolumeSettings, sessions?: AudioSession[]): Promise<void> {
 	const volume = settings.volume ?? 50;
 	const barValue = settings.isMuted ? 0 : volume;
-	const runningApp = findRunningApp(settings.applications, sessions);
-	const appKey = runningApp?.toLowerCase();
+	const { runningApp, mediaTargets, displayApp } = resolveDialDisplay(action.id, settings, sessions);
+	const appKey = displayApp?.toLowerCase();
 	const iconPath = appKey ? iconCache.get(appKey)?.path : undefined;
 
-	const appName = runningApp ? prettifyAppName(runningApp) : undefined;
+	const appName = displayApp ? prettifyAppName(displayApp) : undefined;
 	const nativeTitle = nativeTitleByAction.get(action.id) ?? "";
 
 	let title: string;
@@ -698,9 +764,9 @@ function updateFeedback(action: DialAction<VolumeSettings>, settings: VolumeSett
 	const isDimmed = settings.isMuted || !runningApp;
 	const dimColor = isDimmed ? INACTIVE_BAR_COLOR : "white";
 
-	// Only a dial actually in "Play / Pause Media" mode shows the paused badge - the cached status is
-	// shared globally, but a Mute/Unmute dial has nothing to do with media playback.
-	const isPaused = settings.pushButtonAction === "playPause" && cachedPlaybackStatus === "paused";
+	// Only a dial actually in "Play / Pause Media" mode shows the paused badge - a Mute/Unmute dial has
+	// nothing to do with media playback.
+	const isPaused = settings.pushButtonAction === "playPause" && getDialPlaybackStatus(mediaTargets) === "paused";
 	const isMuted = settings.isMuted ?? false;
 
 	// Everything the on-device display depends on, built from the icon's source path and overlay flags
@@ -713,26 +779,26 @@ function updateFeedback(action: DialAction<VolumeSettings>, settings: VolumeSett
 		indicator: { value: barValue, bar_fill_c: dimColor }
 	};
 
-	if (runningApp && appKey && !iconPath && !iconResolutionInFlight.has(appKey)) {
+	if (displayApp && appKey && !iconPath && !iconResolutionInFlight.has(appKey)) {
 		iconResolutionInFlight.add(appKey);
-		resolveAppIcon(runningApp)
+		resolveAppIcon(displayApp)
 			.then((dataUri) => {
 				if (!dataUri) return;
 				const savedPath = saveIconFile(appKey, dataUri);
 				if (!savedPath) return;
-				iconCache.set(appKey, { exeName: runningApp, path: savedPath });
+				iconCache.set(appKey, { exeName: displayApp, path: savedPath });
 				persistIconCache();
 
 				// The app that triggered this may have stopped running (or been replaced by a
 				// higher-priority one) while extraction was in flight - re-check live rather than
 				// blindly applying a stale snapshot, which would clobber a more recent, correct update.
-				if (findRunningApp(settings.applications) !== runningApp) return;
+				if (resolveDialDisplay(action.id, settings).displayApp !== displayApp) return;
 				return sendFeedbackIfChanged(action, feedbackKey(savedPath), {
 					...feedback,
 					icon: resolveIconFeedbackValue(savedPath, isMuted, isPaused)
 				});
 			})
-			.catch((error) => streamDeck.logger.error(`Failed to load icon for ${runningApp}`, error))
+			.catch((error) => streamDeck.logger.error(`Failed to load icon for ${displayApp}`, error))
 			.finally(() => iconResolutionInFlight.delete(appKey));
 	}
 
@@ -864,80 +930,249 @@ async function extractIconForPid(pid: number): Promise<string | undefined> {
 }
 
 /**
- * P/Invoke helper for simulating the hardware Media Play/Pause key. Windows routes that key globally
- * to whatever app currently owns the System Media Transport Controls session (Spotify, a browser tab
- * playing video, etc.) - there's no per-app "pause" API, so this deliberately mirrors a physical media
- * keyboard key rather than targeting this action's own configured application list.
- *
- * Kept on a single line since it's fed to a `-Command -` shell's stdin line by line (see
- * {@link getMediaShell}), where a multi-line here-string wouldn't be parsed as one statement.
+ * C# helper compiled into {@link mediaShell} (via `Add-Type`) for the parts of media control that need
+ * raw Win32/COM calls PowerShell can't make directly:
+ * - `PressPlayPause` simulates the hardware Media Play/Pause key. Windows routes that key globally to
+ *   whatever app currently owns the system's media session, rather than to this action's own configured
+ *   application list - so it's only the fallback for a dial with nothing of its own to target directly
+ *   (see {@link VolumeControl.togglePlayback}).
+ * - `GetAudioApps` lists every app with an audio session on any output device, and whether it's actually
+ *   playing sound right now (its session "Active", rather than just open) - which is how a media player
+ *   with no media session of its own is known to be playing or paused.
+ * - `SendAppCommand` sends such a player a pause/play command (`WM_APPCOMMAND`, the message a media
+ *   keyboard sends the focused window) straight to its own windows, focused or not - see
+ *   {@link WINDOW_COMMAND_PLAYERS} for why only known players get one.
  */
-const MEDIA_KEY_HELPER_TYPE =
-	"Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class MediaKey { " +
-	'[DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo); }\'';
+const MEDIA_HELPER_TYPE = `
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 
-const VK_MEDIA_PLAY_PAUSE = 0xb3;
-const KEYEVENTF_KEYUP = 0x2;
+public static class MediaHelper {
+    [DllImport("user32.dll")] static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extraInfo);
 
-const MEDIA_KEY_PRESS_COMMAND =
-	`[MediaKey]::keybd_event(${VK_MEDIA_PLAY_PAUSE}, 0, 0, [UIntPtr]::Zero); ` +
-	`[MediaKey]::keybd_event(${VK_MEDIA_PLAY_PAUSE}, 0, ${KEYEVENTF_KEYUP}, [UIntPtr]::Zero)`;
+    public static void PressPlayPause() {
+        keybd_event(0xB3 /* VK_MEDIA_PLAY_PAUSE */, 0, 0, UIntPtr.Zero);
+        keybd_event(0xB3, 0, 2 /* KEYEVENTF_KEYUP */, UIntPtr.Zero);
+    }
+
+    [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
+    class MMDeviceEnumerator {}
+
+    [ComImport, Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IMMDeviceEnumerator {
+        void EnumAudioEndpoints(int dataFlow, int stateMask, out IMMDeviceCollection devices);
+    }
+
+    [ComImport, Guid("0BD7A1BE-7A1A-44DB-8397-CC5392387B5E"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IMMDeviceCollection {
+        void GetCount(out int count);
+        void Item(int index, out IMMDevice device);
+    }
+
+    [ComImport, Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IMMDevice {
+        void Activate(ref Guid iid, int clsCtx, IntPtr activationParams, [MarshalAs(UnmanagedType.IUnknown)] out object iface);
+    }
+
+    [ComImport, Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IAudioSessionManager2 {
+        void GetAudioSessionControl(IntPtr sessionGuid, int flags, out IntPtr control);
+        void GetSimpleAudioVolume(IntPtr sessionGuid, int flags, out IntPtr volume);
+        void GetSessionEnumerator(out IAudioSessionEnumerator sessions);
+    }
+
+    [ComImport, Guid("E2F5BB11-0570-40CA-ACDD-3AA01277DEE8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IAudioSessionEnumerator {
+        void GetCount(out int count);
+        void GetSession(int index, [MarshalAs(UnmanagedType.IUnknown)] out object session);
+    }
+
+    // Only the methods up to GetProcessId are declared - COM interfaces are matched by vtable position.
+    [ComImport, Guid("BFB7FF88-7239-4FC9-8FA2-07C950BE9C6D"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IAudioSessionControl2 {
+        void GetState(out int state);
+        void GetDisplayName(out IntPtr name);
+        void SetDisplayName(IntPtr name, IntPtr eventContext);
+        void GetIconPath(out IntPtr path);
+        void SetIconPath(IntPtr path, IntPtr eventContext);
+        void GetGroupingParam(out Guid groupingId);
+        void SetGroupingParam(IntPtr groupingId, IntPtr eventContext);
+        void RegisterAudioSessionNotification(IntPtr client);
+        void UnregisterAudioSessionNotification(IntPtr client);
+        void GetSessionIdentifier(out IntPtr id);
+        void GetSessionInstanceIdentifier(out IntPtr id);
+        [PreserveSig] int GetProcessId(out int pid);
+    }
+
+    delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
+    [DllImport("user32.dll")] static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+    [DllImport("user32.dll")] static extern int GetWindowThreadProcessId(IntPtr hwnd, out int pid);
+    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hwnd);
+    [DllImport("user32.dll")] static extern int GetWindowTextLength(IntPtr hwnd);
+    [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr hwnd, int cmd);
+    [DllImport("user32.dll")] static extern IntPtr SendMessageTimeout(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, int flags, int timeout, out IntPtr result);
+
+    // Lowercased exe name (without ".exe") of every running process, by pid.
+    static Dictionary<int, string> GetProcessNames() {
+        var names = new Dictionary<int, string>();
+        foreach (var process in Process.GetProcesses()) {
+            names[process.Id] = process.ProcessName.ToLowerInvariant();
+            process.Dispose();
+        }
+        return names;
+    }
+
+    public static Dictionary<string, bool> GetAudioApps() {
+        var apps = new Dictionary<string, bool>();
+        var processNames = GetProcessNames();
+        IMMDeviceCollection devices;
+        ((IMMDeviceEnumerator)new MMDeviceEnumerator()).EnumAudioEndpoints(0 /* eRender */, 1 /* DEVICE_STATE_ACTIVE */, out devices);
+        int deviceCount;
+        devices.GetCount(out deviceCount);
+        Guid managerId = typeof(IAudioSessionManager2).GUID;
+        for (int i = 0; i < deviceCount; i++) {
+            try {
+                IMMDevice device;
+                devices.Item(i, out device);
+                object manager;
+                device.Activate(ref managerId, 23 /* CLSCTX_ALL */, IntPtr.Zero, out manager);
+                IAudioSessionEnumerator sessions;
+                ((IAudioSessionManager2)manager).GetSessionEnumerator(out sessions);
+                int sessionCount;
+                sessions.GetCount(out sessionCount);
+                for (int j = 0; j < sessionCount; j++) {
+                    object session;
+                    sessions.GetSession(j, out session);
+                    var control = (IAudioSessionControl2)session;
+                    int pid, state;
+                    string name;
+                    control.GetProcessId(out pid);
+                    control.GetState(out state);
+                    if (pid == 0 || !processNames.TryGetValue(pid, out name)) continue;
+                    bool active;
+                    apps.TryGetValue(name, out active);
+                    apps[name] = active || state == 1 /* AudioSessionStateActive */;
+                }
+            } catch {}
+        }
+        return apps;
+    }
+
+    // Only each process's own visible, titled, unowned windows - its main window(s), not the hidden helper
+    // windows (IME, tray, clipboard, etc) most apps also own, which would just pass the command on.
+    public static void SendAppCommand(string[] names, int command) {
+        var targets = new HashSet<string>(names);
+        var pids = new HashSet<int>();
+        foreach (var entry in GetProcessNames()) if (targets.Contains(entry.Value)) pids.Add(entry.Key);
+
+        var windows = new List<IntPtr>();
+        EnumWindows((hwnd, _) => {
+            int pid;
+            GetWindowThreadProcessId(hwnd, out pid);
+            if (pids.Contains(pid) && IsWindowVisible(hwnd) && GetWindowTextLength(hwnd) > 0 && GetWindow(hwnd, 4 /* GW_OWNER */) == IntPtr.Zero) windows.Add(hwnd);
+            return true;
+        }, IntPtr.Zero);
+
+        foreach (var hwnd in windows) {
+            IntPtr result;
+            SendMessageTimeout(hwnd, 0x0319 /* WM_APPCOMMAND */, hwnd, new IntPtr(command << 16), 2 /* SMTO_ABORTIFHUNG */, 500, out result);
+        }
+    }
+}
+`;
 
 /**
- * PowerShell for reading the current System Media Transport Controls session's playback status. This is
+ * `WM_APPCOMMAND` command ids for {@link MEDIA_HELPER_TYPE}'s `SendAppCommand` - explicit pause and play
+ * rather than a play/pause toggle, so a player with more than one window can't end up toggled twice.
+ */
+const APPCOMMAND_MEDIA_PLAY = 46;
+const APPCOMMAND_MEDIA_PAUSE = 47;
+
+/**
+ * Media players (lowercased exe name, without ".exe") known to act on a pause/play command sent straight
+ * to their own window, for when they don't register with Windows' media controls at all (e.g. VLC 3) -
+ * see {@link resolveDialMediaTargets}. Deliberately limited to players known to handle it: a window that
+ * doesn't passes the command on to Windows, which then acts on whichever app currently owns the system's
+ * media session, exactly like the global media key - possibly one that isn't on the dial at all.
+ */
+const WINDOW_COMMAND_PLAYERS = new Set(["vlc", "mpc-hc", "mpc-hc64", "mpc-be", "mpc-be64", "mpv"]);
+
+/**
+ * PowerShell for listing and controlling every app's System Media Transport Controls session. This is
  * the same WinRT API (`Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager`) that
  * backs the Windows lock-screen media controls - there's no simpler/native Node API for it. WinRT's
  * async methods return `IAsyncOperation`, which .NET/PowerShell can't `await` directly; `$asTask` is the
  * standard reflection-based trick (used throughout the PowerShell community) for bridging that to a
  * blocking `Task.Wait()` inside a synchronous script.
  *
- * Run once when {@link getMediaShell} starts, defining a `Get-MediaStatus` function that each poll then
- * calls. The session manager is cached after its first request, and that request's wait is capped at 3s
- * so a stuck WinRT call can't block the shell - and any key presses queued behind it - indefinitely.
- * Joined onto one line for the same reason as {@link MEDIA_KEY_HELPER_TYPE}.
+ * Run once when {@link getMediaShell} starts, defining the functions each poll or press then calls:
+ * - `Get-MediaSessions` answers with every session, plus {@link MEDIA_HELPER_TYPE}'s `GetAudioApps`, as
+ *   one line of JSON (see {@link applyMediaSessions}). Windows only identifies a session by its app's
+ *   AppUserModelID, which isn't always recognizable as the app's exe name (Firefox's is a hash of its
+ *   install folder, a Store app's is its package name), so `Get-AumidNames` also looks up the app's Start
+ *   menu name and, for a Store app, its packaged exe - once per id, since the Start menu lookup takes
+ *   ~0.5s - for {@link mediaSessionBelongsTo} to match on.
+ * - `Set-MediaPlayback` plays or pauses the sessions with the given ids, and `Send-PlayerCommand` the
+ *   players with the given names (see {@link setMediaTargetsPlayback}) - both base64-encoded, so a value
+ *   can't break out of the command it's embedded in.
+ *
+ * The session manager is cached after its first request, and that request's wait is capped at 3s so a
+ * stuck WinRT call can't block the shell - and any presses queued behind it - indefinitely. Joined onto
+ * one line since it's fed to a `-Command -` shell's stdin line by line, where a multi-line statement
+ * wouldn't be parsed as one.
  */
-const MEDIA_STATUS_HELPER = [
+const MEDIA_SESSION_HELPER = [
 	"Add-Type -AssemblyName System.Runtime.WindowsRuntime",
 	"$mgrType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime]",
 	"$asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0].MakeGenericMethod($mgrType)",
-	"function Get-MediaStatus { try { if (-not $script:mgr) { $t = $asTask.Invoke($null, @($mgrType::RequestAsync())); if (-not $t.Wait(3000)) { return 'None' }; $script:mgr = $t.Result }; $s = $script:mgr.GetCurrentSession(); if ($s) { $s.GetPlaybackInfo().PlaybackStatus.ToString() } else { 'None' } } catch { 'None' } }"
+	"$script:aumidNames = @{}",
+	"function ConvertFrom-EncodedValues($encoded) { [string[]]@($encoded | ForEach-Object { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_)) }) }",
+	"function Get-MediaManager { if (-not $script:mgr) { $t = $asTask.Invoke($null, @($mgrType::RequestAsync())); if (-not $t.Wait(3000)) { return $null }; $script:mgr = $t.Result }; $script:mgr }",
+	"function Get-AumidNames($id) { if (-not $script:aumidNames.ContainsKey($id)) { $names = @(); try { if (-not $script:startApps) { $script:startApps = @(Get-StartApps) }; $names += @($script:startApps | Where-Object { $_.AppID -eq $id } | ForEach-Object { $_.Name }) } catch {}; if ($id.Contains('!')) { try { $pfn, $appId = $id -split '!', 2; $pkg = Get-AppxPackage -Name $pfn.Substring(0, $pfn.LastIndexOf('_')) | Where-Object { $_.PackageFamilyName -eq $pfn } | Select-Object -First 1; if ($pkg) { $names += @((Get-AppxPackageManifest $pkg).Package.Applications.Application | Where-Object { $_.Id -eq $appId } | ForEach-Object { Split-Path $_.Executable -Leaf }) } } catch {} }; $script:aumidNames[$id] = $names }; $script:aumidNames[$id] }",
+	"function Get-MediaSessions { try { $current = $null; $list = @(); try { $m = Get-MediaManager; if ($m) { $cur = $m.GetCurrentSession(); if ($cur) { $current = $cur.SourceAppUserModelId }; $list = @(foreach ($s in $m.GetSessions()) { $id = $s.SourceAppUserModelId; [pscustomobject]@{ id = $id; names = @(Get-AumidNames $id); status = $s.GetPlaybackInfo().PlaybackStatus.ToString() } }) } } catch {}; $apps = @{}; try { $apps = [MediaHelper]::GetAudioApps() } catch {}; ConvertTo-Json -Compress -Depth 4 -InputObject ([pscustomobject]@{ current = $current; sessions = $list; apps = $apps }) } catch { '' } }",
+	"function Set-MediaPlayback($action, $encodedIds) { try { $ids = ConvertFrom-EncodedValues $encodedIds; $m = Get-MediaManager; if (-not $m) { return }; foreach ($s in $m.GetSessions()) { if ($ids -contains $s.SourceAppUserModelId) { if ($action -eq 'pause') { $null = $s.TryPauseAsync() } else { $null = $s.TryPlayAsync() } } } } catch {} }",
+	`function Send-PlayerCommand($action, $encodedNames) { try { [MediaHelper]::SendAppCommand((ConvertFrom-EncodedValues $encodedNames), $(if ($action -eq 'pause') { ${APPCOMMAND_MEDIA_PAUSE} } else { ${APPCOMMAND_MEDIA_PLAY} })) } catch {} }`
 ].join("; ");
 
 /**
- * Long-lived PowerShell process that handles both media jobs: sending play/pause key presses and
- * answering playback status polls. Spawning a fresh `powershell.exe` (and compiling
- * {@link MEDIA_KEY_HELPER_TYPE} via `Add-Type`) costs 1-2s, which made every press feel laggy and every
- * poll needlessly expensive - so that's paid once up front here, and each press or poll is just one
- * line written to this shell's stdin. Started while any dial is in "Play / Pause Media" mode (see
- * {@link VolumeControl.refreshMediaPolling}), and exits on its own if the plugin dies, since its stdin
- * closes.
+ * Long-lived PowerShell process that handles every media job: sending play/pause presses and answering
+ * media-session polls. Spawning a fresh `powershell.exe` (and compiling {@link MEDIA_HELPER_TYPE} via
+ * `Add-Type`) costs 1-2s, which made every press feel laggy and every poll needlessly expensive - so
+ * that's paid once up front here, and each press or poll is just one line written to this shell's stdin.
+ * Started while any dial is in "Play / Pause Media" mode (see {@link VolumeControl.refreshMediaPolling}),
+ * and exits on its own if the plugin dies, since its stdin closes.
  */
 let mediaShell: ChildProcessWithoutNullStreams | undefined;
 
 /**
- * Status polls waiting on an answer from {@link mediaShell}, keyed by request id. Each request echoes
- * its id back (`STATUS:<id>:<status>`), so an answer that arrives after its request already timed out
- * can't be mistaken for a later request's.
+ * Media-session polls waiting on an answer from {@link mediaShell}, keyed by request id. Each request
+ * echoes its id back (`MEDIA:<id>:<json>`), so an answer that arrives after its request already timed
+ * out can't be mistaken for a later request's.
  */
-const pendingStatusRequests = new Map<number, (status: string) => void>();
-let nextStatusRequestId = 0;
+const pendingMediaRequests = new Map<number, (json: string) => void>();
+let nextMediaRequestId = 0;
 
 function getMediaShell(): ChildProcessWithoutNullStreams {
 	if (mediaShell && mediaShell.exitCode === null) return mediaShell;
 
 	const shell = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-NoLogo", "-Command", "-"], { windowsHide: true });
 	createInterface({ input: shell.stdout }).on("line", (line) => {
-		const match = /^STATUS:(\d+):(.*)$/.exec(line.trim());
-		if (match) pendingStatusRequests.get(Number(match[1]))?.(match[2]);
+		const match = /^MEDIA:(\d+):(.*)$/.exec(line.trim());
+		if (match) pendingMediaRequests.get(Number(match[1]))?.(match[2]);
 	});
 	shell.stderr.on("data", (data) => streamDeck.logger.error(`Media shell: ${String(data).trim()}`));
 	shell.stdin.on("error", (error) => streamDeck.logger.error("Media shell stdin error", error));
 	shell.on("error", (error) => streamDeck.logger.error("Media shell failed", error));
 	shell.on("exit", () => {
 		if (mediaShell === shell) mediaShell = undefined;
-		for (const finish of Array.from(pendingStatusRequests.values())) finish("None");
+		for (const finish of Array.from(pendingMediaRequests.values())) finish("");
 	});
-	shell.stdin.write(`${MEDIA_KEY_HELPER_TYPE}\n${MEDIA_STATUS_HELPER}\n`);
+	// The C# source goes over base64-encoded, so its many lines arrive as one stdin line (see MEDIA_SESSION_HELPER).
+	const helperType = Buffer.from(MEDIA_HELPER_TYPE, "utf-8").toString("base64");
+	shell.stdin.write(`Add-Type -TypeDefinition ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${helperType}')))\n`);
+	shell.stdin.write(`${MEDIA_SESSION_HELPER}\n`);
 
 	mediaShell = shell;
 	return shell;
@@ -954,15 +1189,37 @@ function stopMediaShell(): void {
  */
 function sendMediaPlayPause(): void {
 	try {
-		getMediaShell().stdin.write(`${MEDIA_KEY_PRESS_COMMAND}\n`);
+		getMediaShell().stdin.write("[MediaHelper]::PressPlayPause()\n");
 	} catch (error) {
 		streamDeck.logger.error("Failed to send media play/pause key", error);
 	}
 }
 
 /**
- * How often the shared media-status poll (see {@link VolumeControl.refreshMediaPolling}) re-checks
- * Windows' System Media Transport Controls for the current playback state. Each check is just a quick
+ * Plays or pauses the given targets directly, each in its own app - unlike {@link sendMediaPlayPause},
+ * regardless of which app currently owns the system's media session. Their cached status is updated to
+ * match straight away, ahead of the next poll confirming it.
+ */
+function setMediaTargetsPlayback(targets: MediaTarget[], status: "playing" | "paused"): void {
+	const sessions = targets.flatMap((target) => (target.kind === "session" ? [target.session] : []));
+	const players = targets.flatMap((target) => (target.kind === "player" ? [target.player] : []));
+	const action = status === "paused" ? "pause" : "play";
+	const encode = (values: string[]) => values.map((value) => `'${Buffer.from(value, "utf-8").toString("base64")}'`).join(",");
+
+	try {
+		if (sessions.length > 0) getMediaShell().stdin.write(`Set-MediaPlayback '${action}' @(${encode(sessions.map((session) => session.id))})\n`);
+		if (players.length > 0) getMediaShell().stdin.write(`Send-PlayerCommand '${action}' @(${encode(players)})\n`);
+	} catch (error) {
+		streamDeck.logger.error("Failed to send media play/pause", error);
+	}
+
+	for (const session of sessions) session.status = status;
+	for (const player of players) audioAppActivity.set(player, status === "playing");
+}
+
+/**
+ * How often the shared media-session poll (see {@link VolumeControl.refreshMediaPolling}) re-checks
+ * Windows' System Media Transport Controls for every app's playback state. Each check is just a quick
  * call into the already-running {@link mediaShell}, and dials are only redrawn when the answer changes,
  * so this can be frequent - a change made elsewhere (a physical media key, pausing from inside the app
  * itself) shows up on the dial within about a second. This plugin's own button presses don't wait on
@@ -978,44 +1235,199 @@ const MEDIA_POLL_INTERVAL_MS = 1000;
 const MEDIA_PRESS_GRACE_MS = 1500;
 
 /**
- * How long a status poll waits for {@link mediaShell} to answer. Generous, since the very first poll
- * after the shell starts also waits behind its PowerShell startup and helper setup.
+ * How long a media-session poll waits for {@link mediaShell} to answer. Generous, since the very first
+ * poll after the shell starts also waits behind its PowerShell startup and helper setup.
  */
-const MEDIA_STATUS_TIMEOUT_MS = 10000;
+const MEDIA_SESSIONS_TIMEOUT_MS = 10000;
 
 /**
- * Last-known playback status of whatever app currently owns the system media session, shared across
- * every dial in "Play / Pause Media" mode (see {@link VolumeControl.refreshMediaPolling}). `undefined`
- * means unknown or no active media session - deliberately distinct from "playing", so a dial doesn't
- * show a paused overlay just because nothing is playing at all.
+ * `undefined` means unknown - no clean "Playing"/"Paused" answer ("Stopped"/"Closed"/etc) - which is
+ * deliberately distinct from "playing", so a dial doesn't show a paused overlay just because nothing is
+ * playing at all.
  */
 type MediaPlaybackStatus = "playing" | "paused" | undefined;
-let cachedPlaybackStatus: MediaPlaybackStatus;
+
+/** One app's System Media Transport Controls session, as last reported by {@link pollMediaSessions}. */
+type MediaSession = {
+	/** The app's AppUserModelID (e.g. "Chrome", "Spotify.exe") - also how a press targets this session. */
+	id: string;
+	/** Other names Windows knows the app by, for {@link mediaSessionBelongsTo} (see `Get-AumidNames`). */
+	names: string[];
+	status: MediaPlaybackStatus;
+};
 
 /**
- * Queries Windows for the playback status of whatever app currently owns the system media session.
- * Returns `undefined` for anything other than a clean "Playing"/"Paused" answer (no active session,
- * "Stopped"/"Closed"/etc, or the query failing or timing out) - those all mean "don't claim to know",
- * not "assume playing".
+ * Last-known media sessions of every app on the system, shared across every dial in "Play / Pause
+ * Media" mode (see {@link VolumeControl.refreshMediaPolling}), along with the id of the one that
+ * currently owns the system's media session - the one the global media key acts on.
  */
-function getMediaPlaybackStatus(): Promise<MediaPlaybackStatus> {
+let mediaSessions: MediaSession[] = [];
+let currentMediaSessionId: string | undefined;
+
+/**
+ * Every app with an audio session on any output device (lowercased exe name, without ".exe"), and
+ * whether it's actually playing sound right now - see {@link MEDIA_HELPER_TYPE}'s `GetAudioApps`.
+ */
+let audioAppActivity = new Map<string, boolean>();
+
+/**
+ * One thing a "Play / Pause Media" dial plays/pauses (see {@link resolveDialMediaTargets}): an app's
+ * media session, or a media player with none of its own (see {@link WINDOW_COMMAND_PLAYERS}). `app` is
+ * the dial's own configured app (exe name) it belongs to.
+ */
+type MediaTarget = { app: string } & ({ kind: "session"; session: MediaSession } | { kind: "player"; player: string });
+
+/** A stable id for a target, for {@link VolumeControl.togglePlayback} to remember what it paused. */
+function getMediaTargetId(target: MediaTarget): string {
+	return target.kind === "session" ? target.session.id : `player:${target.player}`;
+}
+
+/**
+ * A session's own reported status, or for a player, whether its audio is actually playing - a paused
+ * player's audio session stays open, but stops being "Active".
+ */
+function getMediaTargetStatus(target: MediaTarget): MediaPlaybackStatus {
+	if (target.kind === "session") return target.session.status;
+	return audioAppActivity.get(target.player) ? "playing" : "paused";
+}
+
+/**
+ * Asks Windows for every app's media session, as `Get-MediaSessions`' raw JSON - an empty string if the
+ * query fails or times out, which {@link applyMediaSessions} treats as there being no sessions at all.
+ */
+function queryMediaSessions(): Promise<string> {
 	return new Promise((resolve) => {
-		const id = nextStatusRequestId++;
-		const timer = setTimeout(() => finish("None"), MEDIA_STATUS_TIMEOUT_MS);
-		function finish(status: string): void {
+		const id = nextMediaRequestId++;
+		const timer = setTimeout(() => finish(""), MEDIA_SESSIONS_TIMEOUT_MS);
+		function finish(json: string): void {
 			clearTimeout(timer);
-			pendingStatusRequests.delete(id);
-			resolve(status === "Playing" ? "playing" : status === "Paused" ? "paused" : undefined);
+			pendingMediaRequests.delete(id);
+			resolve(json);
 		}
-		pendingStatusRequests.set(id, finish);
+		pendingMediaRequests.set(id, finish);
 
 		try {
-			getMediaShell().stdin.write(`[Console]::Out.WriteLine('STATUS:${id}:' + (Get-MediaStatus))\n`);
+			getMediaShell().stdin.write(`[Console]::Out.WriteLine('MEDIA:${id}:' + (Get-MediaSessions))\n`);
 		} catch (error) {
-			streamDeck.logger.error("Failed to read media playback status", error);
-			finish("None");
+			streamDeck.logger.error("Failed to read media sessions", error);
+			finish("");
 		}
 	});
+}
+
+/**
+ * Replaces the cached {@link mediaSessions} and {@link audioAppActivity} with a
+ * {@link queryMediaSessions} answer.
+ */
+function applyMediaSessions(json: string): void {
+	type RawMediaSessions = {
+		current?: string | null;
+		sessions?: { id?: string; names?: string[]; status?: string }[];
+		apps?: Record<string, boolean>;
+	};
+	let raw: RawMediaSessions = {};
+	try {
+		raw = json ? (JSON.parse(json) as RawMediaSessions) : {};
+	} catch (error) {
+		streamDeck.logger.error("Failed to parse media sessions", error);
+	}
+
+	currentMediaSessionId = raw.current ?? undefined;
+	mediaSessions = (Array.isArray(raw.sessions) ? raw.sessions : [])
+		.filter((session) => typeof session.id === "string" && session.id)
+		.map(
+			(session): MediaSession => ({
+				id: String(session.id),
+				names: (Array.isArray(session.names) ? session.names : []).filter((name) => typeof name === "string"),
+				status: session.status === "Playing" ? "playing" : session.status === "Paused" ? "paused" : undefined
+			})
+		);
+	audioAppActivity = new Map(Object.entries(raw.apps && typeof raw.apps === "object" ? raw.apps : {}).map(([app, active]) => [app, active === true]));
+}
+
+/**
+ * Whether a media session belongs to the given app (an exe name, e.g. "chrome.exe"). Most desktop apps'
+ * session ids are some form of their exe's own name ("Spotify.exe", "Chrome", "MSEdge", "Chrome._crx_..."
+ * for an installed web app, "{...}\VideoLAN\VLC\vlc.exe"), and for the rest the Start menu name or
+ * packaged exe looked up alongside it usually is ("Firefox", "Microsoft.Media.Player.exe") - so this
+ * matches if any of those, minus any folder and ".exe", is the app's own name, or contains it as a
+ * whole word.
+ */
+function mediaSessionBelongsTo(session: MediaSession, app: string): boolean {
+	const appName = app.toLowerCase().replace(/\.exe$/, "");
+	if (!appName) return false;
+
+	return [session.id, ...session.names].some((name) => {
+		const lower = name.toLowerCase();
+		const leaf = lower.slice(Math.max(lower.lastIndexOf("\\"), lower.lastIndexOf("/")) + 1).replace(/\.exe$/, "");
+		return leaf === appName || lower.split(/[^a-z0-9]+/).includes(appName);
+	});
+}
+
+/**
+ * Everything a "Play / Pause Media" dial controls: every media session belonging to one of its
+ * configured apps, plus any of them that's a known media player (see {@link WINDOW_COMMAND_PLAYERS})
+ * with an audio session but no media session of its own. Any other app on the dial (a game, a voice chat
+ * app) has nothing that can be paused, so it's left alone. Listed in the dial's own priority order (its
+ * application list), so the first target belongs to its highest-priority app.
+ *
+ * An empty list means there's nothing to control right now (none of its apps are running), and
+ * `undefined` means the dial falls back to the global media key instead (see
+ * {@link VolumeControl.togglePlayback}) - when it has no apps configured at all, or one of them is
+ * running but none of them can be targeted directly.
+ */
+function resolveDialMediaTargets(settings: VolumeSettings, runningApp: string | undefined): MediaTarget[] | undefined {
+	const apps = (settings.applications ?? []).filter(Boolean);
+	if (apps.length === 0) return undefined;
+
+	const targets: MediaTarget[] = [];
+	for (const app of apps) {
+		const sessions = mediaSessions.filter((session) => mediaSessionBelongsTo(session, app));
+		for (const session of sessions) {
+			if (!targets.some((target) => target.kind === "session" && target.session === session)) targets.push({ app, kind: "session", session });
+		}
+
+		const player = app.toLowerCase().replace(/\.exe$/, "");
+		const isTargetablePlayer = sessions.length === 0 && WINDOW_COMMAND_PLAYERS.has(player) && audioAppActivity.has(player);
+		if (isTargetablePlayer && !targets.some((target) => target.kind === "player" && target.player === player)) {
+			targets.push({ app, kind: "player", player });
+		}
+	}
+
+	if (targets.length > 0) return targets;
+	return runningApp ? undefined : [];
+}
+
+/**
+ * What each "Play / Pause Media" dial (action id) last paused itself (see {@link getMediaTargetId}), so
+ * its next press resumes just those - not every other app on the dial that happened to already be
+ * sitting paused (e.g. a YouTube tab paused hours ago) - see {@link VolumeControl.togglePlayback}.
+ */
+const pausedByDial = new Map<string, string[]>();
+
+/**
+ * What a press of a "Play / Pause Media" dial with nothing playing resumes, in priority order: what it
+ * last paused itself, if any of that's still around - or, if it has none (those apps closed, or were
+ * paused some other way), just its highest-priority target, rather than everything on the dial at once.
+ */
+function getTargetsToResume(actionId: string, targets: MediaTarget[]): MediaTarget[] {
+	const pausedHere = pausedByDial.get(actionId) ?? [];
+	const resumable = targets.filter((target) => pausedHere.includes(getMediaTargetId(target)));
+	return resumable.length > 0 ? resumable : targets.slice(0, 1);
+}
+
+/**
+ * What a "Play / Pause Media" dial's paused-icon overlay reflects, given its
+ * {@link resolveDialMediaTargets}: "playing" if any of its targets is, otherwise "paused" if any of them
+ * is - or, for a dial on the global media key fallback, whatever the system's current media session is
+ * doing.
+ */
+function getDialPlaybackStatus(targets: MediaTarget[] | undefined): MediaPlaybackStatus {
+	if (!targets) return mediaSessions.find((session) => session.id === currentMediaSessionId)?.status;
+
+	const statuses = targets.map(getMediaTargetStatus);
+	if (statuses.includes("playing")) return "playing";
+	return statuses.includes("paused") ? "paused" : undefined;
 }
 
 /**
